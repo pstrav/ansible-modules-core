@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_network
@@ -86,9 +90,9 @@ def cloud_network(module, state, label, cidr):
             try:
                 network = pyrax.cloud_networks.create(label, cidr=cidr)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
 
     elif state == 'absent':
@@ -98,7 +102,7 @@ def cloud_network(module, state, label, cidr):
             changed = True
         except pyrax.exceptions.NetworkNotFound:
             pass
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
 
     if network:
@@ -143,4 +147,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 ### invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

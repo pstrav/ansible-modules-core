@@ -18,6 +18,10 @@
 import os_client_config
 from os_client_config import exceptions
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: os_client_config
@@ -39,21 +43,23 @@ author: "Monty Taylor (@emonty)"
 '''
 
 EXAMPLES = '''
-# Get list of clouds that do not support security groups
-- os_client_config:
-- debug: var={{ item }}
-  with_items: "{{ openstack.clouds|rejectattr('secgroup_source', 'none')|list() }}"
+- name: Get list of clouds that do not support security groups
+  os_client_config:
 
-# Get the information back just about the mordred cloud
-- os_client_config:
+- debug:
+    var: "{{ item }}"
+  with_items: "{{ openstack.clouds | rejectattr('secgroup_source', 'none') | list }}"
+
+- name: Get the information back just about the mordred cloud
+  os_client_config:
     clouds:
-    - mordred
+      - mordred
 '''
 
 
 def main():
     module = AnsibleModule(argument_spec=dict(
-        clouds=dict(required=False, default=[]),
+        clouds=dict(required=False, type='list', default=[]),
     ))
     p = module.params
 
@@ -71,4 +77,5 @@ def main():
 # import module snippets
 from ansible.module_utils.basic import *
 
-main()
+if __name__ == "__main__":
+    main()

@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_cbs_attachments
@@ -120,7 +124,7 @@ def cloud_block_storage_attachments(module, state, volume, server, device,
             try:
                 volume.attach_to_instance(server, mountpoint=device)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
             volume.get()
@@ -159,7 +163,7 @@ def cloud_block_storage_attachments(module, state, volume, server, device,
                                            interval=3, attempts=0,
                                            verbose=False)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
             volume.get()
@@ -218,4 +222,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 ### invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

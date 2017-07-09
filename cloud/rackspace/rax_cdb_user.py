@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_cdb_user
@@ -98,7 +102,7 @@ def save_user(module, cdb_id, name, password, databases, host):
 
     try:
         instance = cdb.get(cdb_id)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg='%s' % e.message)
 
     changed = False
@@ -112,7 +116,7 @@ def save_user(module, cdb_id, name, password, databases, host):
                                         password=password,
                                         database_names=databases,
                                         host=host)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
         else:
             changed = True
@@ -134,7 +138,7 @@ def save_user(module, cdb_id, name, password, databases, host):
 
                 new_dbs = [db for db in databases if db not in former_dbs]
                 user.grant_user_access(db_names=new_dbs)
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
             else:
                 changed = True
@@ -153,7 +157,7 @@ def delete_user(module, cdb_id, name):
 
     try:
         instance = cdb.get(cdb_id)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg='%s' % e.message)
 
     changed = False
@@ -163,7 +167,7 @@ def delete_user(module, cdb_id, name):
     if user:
         try:
             user.delete()
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
         else:
             changed = True
@@ -217,4 +221,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 # invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

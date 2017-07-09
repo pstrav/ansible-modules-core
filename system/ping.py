@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # (c) 2012, Michael DeHaan <michael.dehaan@gmail.com>
+# (c) 2016, Toshio Kuratomi <tkuratomi@ansible.com>
 #
 # This file is part of Ansible
 #
@@ -18,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'core',
+                    'version': '1.0'}
 
 DOCUMENTATION = '''
 ---
@@ -40,23 +45,22 @@ EXAMPLES = '''
 ansible webservers -m ping
 '''
 
-import exceptions
+from ansible.module_utils.basic import AnsibleModule
 
 def main():
     module = AnsibleModule(
-        argument_spec = dict(
+        argument_spec=dict(
             data=dict(required=False, default=None),
         ),
-        supports_check_mode = True
+        supports_check_mode=True
     )
     result = dict(ping='pong')
     if module.params['data']:
         if module.params['data'] == 'crash':
-            raise exceptions.Exception("boom")
+            raise Exception("boom")
         result['ping'] = module.params['data']
     module.exit_json(**result)
 
-from ansible.module_utils.basic import *
-
-main()
+if __name__ == '__main__':
+    main()
 

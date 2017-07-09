@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_clb_nodes
@@ -192,7 +196,7 @@ def main():
     if virtualenv:
         try:
             _activate_virtualenv(virtualenv)
-        except IOError, e:
+        except IOError as e:
             module.fail_json(msg='Failed to activate virtualenv %s (%s)' % (
                                  virtualenv, e))
 
@@ -205,7 +209,7 @@ def main():
 
     try:
         lb = pyrax.cloud_loadbalancers.get(load_balancer_id)
-    except pyrax.exc.PyraxException, e:
+    except pyrax.exc.PyraxException as e:
         module.fail_json(msg='%s' % e.message)
 
     node = _get_node(lb, node_id, address, port)
@@ -220,7 +224,7 @@ def main():
             result = {}
         except pyrax.exc.NotFound:
             module.exit_json(changed=False, state=state)
-        except pyrax.exc.PyraxException, e:
+        except pyrax.exc.PyraxException as e:
             module.fail_json(msg='%s' % e.message)
     else:  # present
         if not node:
@@ -237,7 +241,7 @@ def main():
                         weight=weight, type=typ)
                     resp, body = lb.add_nodes([node])
                     result.update(body['nodes'][0])
-                except pyrax.exc.PyraxException, e:
+                except pyrax.exc.PyraxException as e:
                     module.fail_json(msg='%s' % e.message)
         else:  # Updating an existing node
             mutable = {
@@ -258,7 +262,7 @@ def main():
                 # type; this should probably be fixed in pyrax
                 lb.update_node(node, diff=mutable)
                 result.update(mutable)
-            except pyrax.exc.PyraxException, e:
+            except pyrax.exc.PyraxException as e:
                 module.fail_json(msg='%s' % e.message)
 
     if wait:
@@ -278,4 +282,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 # invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

@@ -14,6 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'committer',
+                    'version': '1.0'}
+
 DOCUMENTATION = """
 module: ec2_scaling_policy
 short_description: Create or delete AWS scaling policies for Autoscaling groups
@@ -106,7 +110,7 @@ def create_scaling_policy(connection, module):
             connection.create_scaling_policy(sp)
             policy = connection.get_all_policies(as_group=asg_name,policy_names=[sp_name])[0]
             module.exit_json(changed=True, name=policy.name, arn=policy.policy_arn, as_name=policy.as_name, scaling_adjustment=policy.scaling_adjustment, cooldown=policy.cooldown, adjustment_type=policy.adjustment_type, min_adjustment_step=policy.min_adjustment_step)
-        except BotoServerError, e:
+        except BotoServerError as e:
             module.fail_json(msg=str(e))
     else:
         policy = scalingPolicies[0]
@@ -133,7 +137,7 @@ def create_scaling_policy(connection, module):
                 connection.create_scaling_policy(policy)
                 policy = connection.get_all_policies(as_group=asg_name,policy_names=[sp_name])[0]
             module.exit_json(changed=changed, name=policy.name, arn=policy.policy_arn, as_name=policy.as_name, scaling_adjustment=policy.scaling_adjustment, cooldown=policy.cooldown, adjustment_type=policy.adjustment_type, min_adjustment_step=policy.min_adjustment_step)
-        except BotoServerError, e:
+        except BotoServerError as e:
             module.fail_json(msg=str(e))
 
 
@@ -147,7 +151,7 @@ def delete_scaling_policy(connection, module):
         try:
             connection.delete_policy(sp_name, asg_name)
             module.exit_json(changed=True)
-        except BotoServerError, e:
+        except BotoServerError as e:
             module.exit_json(changed=False, msg=str(e))
     else:
         module.exit_json(changed=False)
@@ -178,7 +182,7 @@ def main():
 
     try:
         connection = connect_to_aws(boto.ec2.autoscale, region, **aws_connect_params)
-    except (boto.exception.NoAuthHandlerFound, AnsibleAWSError), e:
+    except (boto.exception.NoAuthHandlerFound, AnsibleAWSError) as e:
         module.fail_json(msg = str(e))
 
     if state == 'present':

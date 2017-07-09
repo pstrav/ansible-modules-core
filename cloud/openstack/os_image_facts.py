@@ -21,6 +21,10 @@ try:
 except ImportError:
     HAS_SHADE = False
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 module: os_image_facts
 short_description: Retrieve facts about an image within OpenStack.
@@ -42,15 +46,18 @@ extends_documentation_fragment: openstack
 '''
 
 EXAMPLES = '''
-# Gather facts about a previously created image named image1
-- os_image_facts:
+- name: Gather facts about a previously created image named image1
+  os_image_facts:
     auth:
       auth_url: https://your_api_url.com:9000/v2.0
       username: user
       password: password
       project_name: someproject
     image: image1
-- debug: var=openstack
+
+- name: Show openstack facts
+  debug:
+    var: openstack
 '''
 
 RETURN = '''
@@ -116,7 +123,7 @@ openstack_image:
             returned: success
             type: string
         is_public:
-            description: Is plubic flag of the image.
+            description: Is public flag of the image.
             returned: success
             type: boolean
         deleted_at:
@@ -148,7 +155,7 @@ def main():
             openstack_image=image))
 
     except shade.OpenStackCloudException as e:
-        module.fail_json(msg=e.message)
+        module.fail_json(msg=str(e))
 
 # this is magic, see lib/ansible/module_common.py
 from ansible.module_utils.basic import *

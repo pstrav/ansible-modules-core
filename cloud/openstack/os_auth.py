@@ -22,6 +22,10 @@ try:
 except ImportError:
     HAS_SHADE = False
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: os_auth
@@ -37,10 +41,13 @@ extends_documentation_fragment: openstack
 '''
 
 EXAMPLES = '''
-# Authenticate to the cloud and retrieve the service catalog
-- os_auth:
+- name: Authenticate to the cloud and retrieve the service catalog
+  os_auth:
     cloud: rax-dfw
-- debug: var=service_catalog
+
+- name: Show service catalog
+  debug:
+    var: service_catalog
 '''
 
 def main():
@@ -60,7 +67,7 @@ def main():
               auth_token=cloud.auth_token,
               service_catalog=cloud.service_catalog))
     except shade.OpenStackCloudException as e:
-        module.fail_json(msg=e.message)
+        module.fail_json(msg=str(e))
 
 # this is magic, see lib/ansible/module_common.py
 from ansible.module_utils.basic import *

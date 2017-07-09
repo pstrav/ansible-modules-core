@@ -16,6 +16,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: postgresql_db
@@ -69,11 +73,6 @@ options:
       - Encoding of the database
     required: false
     default: null
-  encoding:
-    description:
-      - Encoding of the database
-    required: false
-    default: null
   lc_collate:
     description:
       - Collation order (LC_COLLATE) to use in the database. Must match collation order of template database unless C(template0) is used as template.
@@ -100,16 +99,18 @@ author: "Ansible Core Team"
 
 EXAMPLES = '''
 # Create a new database with name "acme"
-- postgresql_db: name=acme
+- postgresql_db:
+    name: acme
 
 # Create a new database with name "acme" and specific encoding and locale
 # settings. If a template different from "template0" is specified, encoding
 # and locale settings must match those of the template.
-- postgresql_db: name=acme
-                 encoding='UTF-8'
-                 lc_collate='de_DE.UTF-8'
-                 lc_ctype='de_DE.UTF-8'
-                 template='template0'
+- postgresql_db:
+    name: acme
+    encoding: UTF-8
+    lc_collate: de_DE.UTF-8
+    lc_ctype: de_DE.UTF-8
+    template: template0
 '''
 
 try:
@@ -119,6 +120,7 @@ except ImportError:
     postgresqldb_found = False
 else:
     postgresqldb_found = True
+from ansible.module_utils.six import iteritems
 
 class NotSupportedError(Exception):
     pass
@@ -266,7 +268,7 @@ def main():
         "login_password":"password",
         "port":"port"
     }
-    kw = dict( (params_map[k], v) for (k, v) in module.params.iteritems()
+    kw = dict( (params_map[k], v) for (k, v) in iteritems(module.params)
               if k in params_map and v != '' )
 
     # If a login_unix_socket is specified, incorporate it here.
@@ -285,36 +287,41 @@ def main():
                                               .ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = db_connection.cursor(
                 cursor_factory=psycopg2.extras.DictCursor)
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg="unable to connect to database: %s" % e)
 
     try:
         if module.check_mode:
             if state == "absent":
-                changed = not db_exists(cursor, db)
+                changed = db_exists(cursor, db)
             elif state == "present":
                 changed = not db_matches(cursor, db, owner, template, encoding,
                                          lc_collate, lc_ctype)
-            module.exit_json(changed=changed,db=db)
+            module.exit_json(changed=changed, db=db)
 
         if state == "absent":
             try:
                 changed = db_delete(cursor, db)
-            except SQLParseError, e:
+            except SQLParseError:
+                e = get_exception()
                 module.fail_json(msg=str(e))
 
         elif state == "present":
             try:
                 changed = db_create(cursor, db, owner, template, encoding,
                                 lc_collate, lc_ctype)
-            except SQLParseError, e:
+            except SQLParseError:
+                e = get_exception()
                 module.fail_json(msg=str(e))
-    except NotSupportedError, e:
+    except NotSupportedError:
+        e = get_exception()
         module.fail_json(msg=str(e))
     except SystemExit:
         # Avoid catching this on Python 2.4 
         raise
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         module.fail_json(msg="Database query failed: %s" % e)
 
     module.exit_json(changed=changed, db=db)

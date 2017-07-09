@@ -19,6 +19,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_files
@@ -86,10 +90,12 @@ EXAMPLES = '''
   gather_facts: no
   tasks:
     - name: "List all containers"
-      rax_files: state=list
+      rax_files:
+        state: list
 
     - name: "Create container called 'mycontainer'"
-      rax_files: container=mycontainer
+      rax_files:
+        container: mycontainer
 
     - name: "Create container 'mycontainer2' with metadata"
       rax_files:
@@ -99,19 +105,30 @@ EXAMPLES = '''
           file_for: someuser@example.com
 
     - name: "Set a container's web index page"
-      rax_files: container=mycontainer web_index=index.html
+      rax_files:
+        container: mycontainer
+        web_index: index.html
 
     - name: "Set a container's web error page"
-      rax_files: container=mycontainer web_error=error.html
+      rax_files:
+        container: mycontainer
+        web_error: error.html
 
     - name: "Make container public"
-      rax_files: container=mycontainer public=yes
+      rax_files:
+        container: mycontainer
+        public: yes
 
     - name: "Make container public with a 24 hour TTL"
-      rax_files: container=mycontainer public=yes ttl=86400
+      rax_files:
+        container: mycontainer
+        public: yes
+        ttl: 86400
 
     - name: "Make container private"
-      rax_files: container=mycontainer private=yes
+      rax_files:
+        container: mycontainer
+        private: yes
 
 - name: "Test Cloud Files Containers Metadata Storage"
   hosts: local
@@ -142,7 +159,7 @@ EXAMPLES = '''
 try:
     import pyrax
     HAS_PYRAX = True
-except ImportError, e:
+except ImportError as e:
     HAS_PYRAX = False
 
 EXIT_DICT = dict(success=True)
@@ -152,7 +169,7 @@ META_PREFIX = 'x-container-meta-'
 def _get_container(module, cf, container):
     try:
         return cf.get_container(container)
-    except pyrax.exc.NoSuchContainer, e:
+    except pyrax.exc.NoSuchContainer as e:
         module.fail_json(msg=e.message)
 
 
@@ -162,7 +179,7 @@ def _fetch_meta(module, container):
         for k, v in container.get_metadata().items():
             split_key = k.split(META_PREFIX)[-1]
             EXIT_DICT['meta'][split_key] = v
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg=e.message)
 
 
@@ -172,7 +189,7 @@ def meta(cf, module, container_, state, meta_, clear_meta):
     if meta_ and state == 'present':
         try:
             meta_set = c.set_metadata(meta_, clear=clear_meta)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
     elif meta_ and state == 'absent':
         remove_results = []
@@ -214,12 +231,12 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
 
     try:
         c = cf.get_container(container_)
-    except pyrax.exc.NoSuchContainer, e:
+    except pyrax.exc.NoSuchContainer as e:
         # Make the container if state=present, otherwise bomb out
         if state == 'present':
             try:
                 c = cf.create_container(container_)
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg=e.message)
             else:
                 EXIT_DICT['changed'] = True
@@ -232,7 +249,7 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
         if state == 'absent':
             try:
                 cont_deleted = c.delete()
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg=e.message)
             else:
                 EXIT_DICT['deleted'] = True
@@ -240,7 +257,7 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
     if meta_:
         try:
             meta_set = c.set_metadata(meta_, clear=clear_meta)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
         finally:
             _fetch_meta(module, c)
@@ -248,7 +265,7 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
     if ttl:
         try:
             c.cdn_ttl = ttl
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
         else:
             EXIT_DICT['ttl'] = c.cdn_ttl
@@ -256,7 +273,7 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
     if public:
         try:
             cont_public = c.make_public()
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
         else:
             EXIT_DICT['container_urls'] = dict(url=c.cdn_uri,
@@ -267,7 +284,7 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
     if private:
         try:
             cont_private = c.make_private()
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
         else:
             EXIT_DICT['set_private'] = True
@@ -275,7 +292,7 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
     if web_index:
         try:
             cont_web_index = c.set_web_index_page(web_index)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
         else:
             EXIT_DICT['set_index'] = True
@@ -285,7 +302,7 @@ def container(cf, module, container_, state, meta_, clear_meta, ttl, public,
     if web_error:
         try:
             cont_err_index = c.set_web_error_page(web_error)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
         else:
             EXIT_DICT['set_error'] = True
@@ -376,4 +393,6 @@ def main():
 from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
-main()
+
+if __name__ == '__main__':
+    main()

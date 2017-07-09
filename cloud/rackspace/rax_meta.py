@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_meta
@@ -91,7 +95,7 @@ def rax_meta(module, address, name, server_id, meta):
         search_opts = dict(name='^%s$' % name)
         try:
             servers = cs.servers.list(search_opts=search_opts)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
     elif address:
         servers = []
@@ -101,13 +105,13 @@ def rax_meta(module, address, name, server_id, meta):
                     if address in addresses:
                         servers.append(server)
                         break
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
     elif server_id:
         servers = []
         try:
             servers.append(cs.servers.get(server_id))
-        except Exception, e:
+        except Exception as e:
             pass
 
     if len(servers) > 1:
@@ -175,4 +179,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 ### invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

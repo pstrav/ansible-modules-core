@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_dns
@@ -28,7 +32,7 @@ options:
     description:
       - Brief description of the domain. Maximum length of 160 characters
   email:
-    desctiption:
+    description:
       - Email address of the domain administrator
   name:
     description:
@@ -89,14 +93,14 @@ def rax_dns(module, comment, email, name, state, ttl):
 
         try:
             domain = dns.find(name=name)
-        except pyrax.exceptions.NoUniqueMatch, e:
+        except pyrax.exceptions.NoUniqueMatch as e:
             module.fail_json(msg='%s' % e.message)
         except pyrax.exceptions.NotFound:
             try:
                 domain = dns.create(name=name, emailAddress=email, ttl=ttl,
                                     comment=comment)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
         update = {}
@@ -112,7 +116,7 @@ def rax_dns(module, comment, email, name, state, ttl):
                 domain.update(**update)
                 changed = True
                 domain.get()
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
     elif state == 'absent':
@@ -121,14 +125,14 @@ def rax_dns(module, comment, email, name, state, ttl):
         except pyrax.exceptions.NotFound:
             domain = {}
             pass
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
 
         if domain:
             try:
                 domain.delete()
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
     module.exit_json(changed=changed, domain=rax_to_dict(domain))
@@ -170,4 +174,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 ### invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

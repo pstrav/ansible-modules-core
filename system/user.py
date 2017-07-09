@@ -18,6 +18,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'core',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: user
@@ -61,9 +65,10 @@ options:
     groups:
         required: false
         description:
-            - Puts the user in this comma-delimited list of groups. When set to
-              the empty string ('groups='), the user is removed from all groups
-              except the primary group.
+            - Puts the user in  list of groups. When set to the empty string ('groups='),
+              the user is removed from all groups except the primary group.
+            - Before version 2.3, the only input format allowed was a 'comma separated string',
+              now it should be able to accept YAML lists also.
     append:
         required: false
         default: "no"
@@ -83,6 +88,7 @@ options:
         required: false
         description:
             - Optionally set a home skeleton directory. Requires createhome option!
+        version_added: "2.0"
     password:
         required: false
         description:
@@ -149,7 +155,7 @@ options:
               This will B(not) overwrite an existing SSH key.
     ssh_key_bits:
         required: false
-        default: 2048
+        default: default set by ssh-keygen
         version_added: "0.9"
         description:
             - Optionally specify number of bits in SSH key to create.
@@ -158,7 +164,7 @@ options:
         default: rsa
         version_added: "0.9"
         description:
-            - Optionally specify the type of SSH key to generate. 
+            - Optionally specify the type of SSH key to generate.
               Available SSH key types will depend on implementation
               present on target host.
     ssh_key_file:
@@ -199,19 +205,38 @@ options:
 
 EXAMPLES = '''
 # Add the user 'johnd' with a specific uid and a primary group of 'admin'
-- user: name=johnd comment="John Doe" uid=1040 group=admin
+- user:
+    name: johnd
+    comment: "John Doe"
+    uid: 1040
+    group: admin
 
 # Add the user 'james' with a bash shell, appending the group 'admins' and 'developers' to the user's groups
-- user: name=james shell=/bin/bash groups=admins,developers append=yes
+- user:
+    name: james
+    shell: /bin/bash
+    groups: admins,developers
+    append: yes
 
 # Remove the user 'johnd'
-- user: name=johnd state=absent remove=yes
+- user:
+    name: johnd
+    state: absent
+    remove: yes
 
 # Create a 2048-bit SSH key for user jsmith in ~jsmith/.ssh/id_rsa
-- user: name=jsmith generate_ssh_key=yes ssh_key_bits=2048 ssh_key_file=.ssh/id_rsa
+- user:
+    name: jsmith
+    generate_ssh_key: yes
+    ssh_key_bits: 2048
+    ssh_key_file: .ssh/id_rsa
 
 # added a consultant whose account you want to expire
-- user: name=james18 shell=/bin/zsh groups=developers expires=1422403387
+- user:
+    name: james18
+    shell: /bin/zsh
+    groups: developers
+    expires: 1422403387
 '''
 
 import os
@@ -220,6 +245,7 @@ import grp
 import platform
 import socket
 import time
+from ansible.module_utils._text import to_native
 
 try:
     import spwd
@@ -260,7 +286,6 @@ class User(object):
         self.non_unique  = module.params['non_unique']
         self.seuser     = module.params['seuser']
         self.group      = module.params['group']
-        self.groups     = module.params['groups']
         self.comment    = module.params['comment']
         self.shell      = module.params['shell']
         self.password   = module.params['password']
@@ -278,16 +303,18 @@ class User(object):
         self.ssh_comment = module.params['ssh_key_comment']
         self.ssh_passphrase = module.params['ssh_key_passphrase']
         self.update_password = module.params['update_password']
-        self.home    = None
+        self.home    = module.params['home']
         self.expires = None
+        self.groups = None
 
-        if module.params['home'] is not None:
-            self.home = os.path.expanduser(module.params['home'])
+        if module.params['groups'] is not None:
+            self.groups = ','.join(module.params['groups'])
 
         if module.params['expires']:
             try:
                 self.expires = time.gmtime(module.params['expires'])
-            except Exception,e:
+            except Exception:
+                e = get_exception()
                 module.fail_json("Invalid expires time %s: %s" %(self.expires, str(e)))
 
         if module.params['ssh_key_file'] is not None:
@@ -296,8 +323,14 @@ class User(object):
             self.ssh_file = os.path.join('.ssh', 'id_%s' % self.ssh_type)
 
 
-    def execute_command(self, cmd, use_unsafe_shell=False, data=None):
-        return self.module.run_command(cmd, use_unsafe_shell=use_unsafe_shell, data=data)
+    def execute_command(self, cmd, use_unsafe_shell=False, data=None, obey_checkmode=True):
+        if self.module.check_mode and obey_checkmode:
+            self.module.debug('In check mode, would have run: "%s"' % cmd)
+            return (0, '','')
+        else:
+            # cast all args to strings ansible-modules-core/issues/4397
+            cmd = [str(x) for x in cmd]
+            return self.module.run_command(cmd, use_unsafe_shell=use_unsafe_shell, data=data)
 
     def remove_user_userdel(self):
         cmd = [self.module.get_bin_path('userdel', True)]
@@ -392,13 +425,12 @@ class User(object):
         if not os.access(usermod_path, os.X_OK):
             return False
 
-        cmd = [usermod_path]
-        cmd.append('--help')
-        rc, data1, data2 = self.execute_command(cmd)
+        cmd = [usermod_path, '--help']
+        (rc, data1, data2) = self.execute_command(cmd, obey_checkmode=False)
         helpout = data1 + data2
 
         # check if --append exists
-        lines = helpout.split('\n')
+        lines = to_native(helpout).split('\n')
         for line in lines:
             if line.strip().startswith('-a, --append'):
                 return True
@@ -428,7 +460,8 @@ class User(object):
                 cmd.append(self.group)
 
         if self.groups is not None:
-            current_groups = self.user_group_membership()
+            # get a list of all groups for the user, including the primary
+            current_groups = self.user_group_membership(exclude_primary=False)
             groups_need_mod = False
             groups = []
 
@@ -458,7 +491,6 @@ class User(object):
                     cmd.append('-G')
                     cmd.append(','.join(groups))
 
-
         if self.comment is not None and info[4] != self.comment:
             cmd.append('-c')
             cmd.append(self.comment)
@@ -484,8 +516,6 @@ class User(object):
         # skip if no changes to be made
         if len(cmd) == 1:
             return (None, '', '')
-        elif self.module.check_mode:
-            return (0, '', '')
 
         cmd.append(self.name)
         return self.execute_command(cmd)
@@ -523,12 +553,19 @@ class User(object):
                 groups.remove(g)
         return groups
 
-    def user_group_membership(self):
+    def user_group_membership(self, exclude_primary=True):
+        ''' Return a list of groups the user belongs to '''
         groups = []
         info = self.get_pwd_info()
         for group in grp.getgrall():
-            if self.name in group.gr_mem and not info[3] == group.gr_gid:
-                groups.append(group[0])
+            if self.name in group.gr_mem:
+                # Exclude the user's primary group by default
+                if not exclude_primary:
+                    groups.append(group[0])
+                else:
+                    if info[3] != group.gr_gid:
+                        groups.append(group[0])
+
         return groups
 
     def user_exists(self):
@@ -586,19 +623,19 @@ class User(object):
             if self.module.check_mode:
                 return (0, '', '')
             try:
-                os.mkdir(ssh_dir, 0700)
+                os.mkdir(ssh_dir, int('0700', 8))
                 os.chown(ssh_dir, info[2], info[3])
-            except OSError, e:
+            except OSError:
+                e = get_exception()
                 return (1, '', 'Failed to create %s: %s' % (ssh_dir, str(e)))
         if os.path.exists(ssh_key_file):
             return (None, 'Key already exists', '')
-        if self.module.check_mode:
-            return (0, '', '')
         cmd = [self.module.get_bin_path('ssh-keygen', True)]
         cmd.append('-t')
         cmd.append(self.ssh_type)
-        cmd.append('-b')
-        cmd.append(self.ssh_bits)
+        if self.ssh_bits > 0:
+            cmd.append('-b')
+            cmd.append(self.ssh_bits)
         cmd.append('-C')
         cmd.append(self.ssh_comment)
         cmd.append('-f')
@@ -610,7 +647,7 @@ class User(object):
             cmd.append('')
 
         (rc, out, err) = self.execute_command(cmd)
-        if rc == 0:
+        if rc == 0 and not self.module.check_mode:
             # If the keys were successfully created, we should be able
             # to tweak ownership.
             os.chown(ssh_key_file, info[2], info[3])
@@ -626,7 +663,7 @@ class User(object):
         cmd.append('-f')
         cmd.append(ssh_key_file)
 
-        return self.execute_command(cmd)
+        return self.execute_command(cmd, obey_checkmode=False)
 
     def get_ssh_public_key(self):
         ssh_public_key_file = '%s.pub' % self.get_ssh_key_path()
@@ -660,12 +697,14 @@ class User(object):
             if os.path.exists(skeleton):
                 try:
                     shutil.copytree(skeleton, path, symlinks=True)
-                except OSError, e:
+                except OSError:
+                    e = get_exception()
                     self.module.exit_json(failed=True, msg="%s" % e)
         else:
             try:
                 os.makedirs(path)
-            except OSError, e:
+            except OSError:
+                e = get_exception()
                 self.module.exit_json(failed=True, msg="%s" % e)
 
     def chown_homedir(self, uid, gid, path):
@@ -676,7 +715,8 @@ class User(object):
                     os.chown(path, uid, gid)
                 for f in files:
                     os.chown(os.path.join(root, f), uid, gid)
-        except OSError, e:
+        except OSError:
+            e = get_exception()
             self.module.exit_json(failed=True, msg="%s" % e)
 
 
@@ -1023,7 +1063,7 @@ class OpenBSDUser(User):
             # find current login class
             user_login_class = None
             userinfo_cmd = [self.module.get_bin_path('userinfo', True), self.name]
-            (rc, out, err) = self.execute_command(userinfo_cmd)
+            (rc, out, err) = self.execute_command(userinfo_cmd, obey_checkmode=False)
 
             for line in out.splitlines():
                 tokens = line.split()
@@ -1044,8 +1084,6 @@ class OpenBSDUser(User):
         # skip if no changes to be made
         if len(cmd) == 1:
             return (None, '', '')
-        elif self.module.check_mode:
-            return (0, '', '')
 
         cmd.append(self.name)
         return self.execute_command(cmd)
@@ -1203,8 +1241,6 @@ class NetBSDUser(User):
         # skip if no changes to be made
         if len(cmd) == 1:
             return (None, '', '')
-        elif self.module.check_mode:
-            return (0, '', '')
 
         cmd.append(self.name)
         return self.execute_command(cmd)
@@ -1228,6 +1264,29 @@ class SunOS(User):
     platform = 'SunOS'
     distribution = None
     SHADOWFILE = '/etc/shadow'
+
+    def get_password_defaults(self):
+        # Read password aging defaults
+        try:
+            minweeks = ''
+            maxweeks = ''
+            warnweeks = ''
+            for line in open("/etc/default/passwd", 'r'):
+                line = line.strip()
+                if (line.startswith('#') or line == ''):
+                    continue
+                key, value = line.split('=')
+                if key == "MINWEEKS":
+                    minweeks = value.rstrip('\n')
+                elif key == "MAXWEEKS":
+                    maxweeks = value.rstrip('\n')
+                elif key == "WARNWEEKS":
+                    warnweeks = value.rstrip('\n')
+        except Exception:
+            err = get_exception()
+            self.module.fail_json(msg="failed to read /etc/default/passwd: %s" % str(err))
+
+        return (minweeks, maxweeks, warnweeks)
 
     def remove_user(self):
         cmd = [self.module.get_bin_path('userdel', True)]
@@ -1279,15 +1338,14 @@ class SunOS(User):
 
         cmd.append(self.name)
 
-        if self.module.check_mode:
-            return (0, '', '')
-        else:
-            (rc, out, err) = self.execute_command(cmd)
-            if rc is not None and rc != 0:
-                self.module.fail_json(name=self.name, msg=err, rc=rc)
+        (rc, out, err) = self.execute_command(cmd)
+        if rc is not None and rc != 0:
+            self.module.fail_json(name=self.name, msg=err, rc=rc)
 
-            # we have to set the password by editing the /etc/shadow file 
+        if not self.module.check_mode:
+            # we have to set the password by editing the /etc/shadow file
             if self.password is not None:
+                minweeks, maxweeks, warnweeks = self.get_password_defaults()
                 try:
                     lines = []
                     for line in open(self.SHADOWFILE, 'rb').readlines():
@@ -1297,13 +1355,20 @@ class SunOS(User):
                             continue
                         fields[1] = self.password
                         fields[2] = str(int(time.time() / 86400))
+                        if minweeks:
+                            fields[3] = str(int(minweeks) * 7)
+                        if maxweeks:
+                            fields[4] = str(int(maxweeks) * 7)
+                        if warnweeks:
+                            fields[5] = str(int(warnweeks) * 7)
                         line = ':'.join(fields)
                         lines.append('%s\n' % line)
                     open(self.SHADOWFILE, 'w+').writelines(lines)
-                except Exception, err:
+                except Exception:
+                    err = get_exception()
                     self.module.fail_json(msg="failed to update users password: %s" % str(err))
 
-            return (rc, out, err)
+        return (rc, out, err)
 
     def modify_user_usermod(self):
         cmd = [self.module.get_bin_path('usermod', True)]
@@ -1363,19 +1428,18 @@ class SunOS(User):
 
         # modify the user if cmd will do anything
         if cmd_len != len(cmd):
-            (rc, out, err) = (0, '', '')
-            if not self.module.check_mode:
-                cmd.append(self.name)
-                (rc, out, err) = self.execute_command(cmd)
-                if rc is not None and rc != 0:
-                    self.module.fail_json(name=self.name, msg=err, rc=rc)
+            cmd.append(self.name)
+            (rc, out, err) = self.execute_command(cmd)
+            if rc is not None and rc != 0:
+                self.module.fail_json(name=self.name, msg=err, rc=rc)
         else:
             (rc, out, err) = (None, '', '')
 
-        # we have to set the password by editing the /etc/shadow file 
+        # we have to set the password by editing the /etc/shadow file
         if self.update_password == 'always' and self.password is not None and info[1] != self.password:
             (rc, out, err) = (0, '', '')
             if not self.module.check_mode:
+                minweeks, maxweeks, warnweeks = self.get_password_defaults()
                 try:
                     lines = []
                     for line in open(self.SHADOWFILE, 'rb').readlines():
@@ -1384,12 +1448,19 @@ class SunOS(User):
                             lines.append(line)
                             continue
                         fields[1] = self.password
-                        fields[2] = str(int(time.time() / 86400))	
+                        fields[2] = str(int(time.time() / 86400))
+                        if minweeks:
+                            fields[3] = str(int(minweeks) * 7)
+                        if maxweeks:
+                            fields[4] = str(int(maxweeks) * 7)
+                        if warnweeks:
+                            fields[5] = str(int(warnweeks) * 7)
                         line = ':'.join(fields)
                         lines.append('%s\n' % line)
                     open(self.SHADOWFILE, 'w+').writelines(lines)
                     rc = 0
-                except Exception, err:
+                except Exception:
+                    err = get_exception()
                     self.module.fail_json(msg="failed to update users password: %s" % str(err))
 
         return (rc, out, err)
@@ -1432,7 +1503,7 @@ class DarwinUser(User):
     def _list_user_groups(self):
         cmd = self._get_dscl()
         cmd += [ '-search', '/Groups', 'GroupMembership', self.name ]
-        (rc, out, err) = self.execute_command(cmd)
+        (rc, out, err) = self.execute_command(cmd, obey_checkmode=False)
         groups = []
         for line in out.splitlines():
             if line.startswith(' ') or line.startswith(')'):
@@ -1444,7 +1515,7 @@ class DarwinUser(User):
         '''Return user PROPERTY as given my dscl(1) read or None if not found.'''
         cmd = self._get_dscl()
         cmd += [ '-read', '/Users/%s' % self.name, property ]
-        (rc, out, err) = self.execute_command(cmd)
+        (rc, out, err) = self.execute_command(cmd, obey_checkmode=False)
         if rc != 0:
             return None
         # from dscl(1)
@@ -1467,7 +1538,7 @@ class DarwinUser(User):
         '''Return the next available uid'''
         cmd = self._get_dscl()
         cmd += ['-list', '/Users', 'UniqueID']
-        (rc, out, err) = self.execute_command(cmd)
+        (rc, out, err) = self.execute_command(cmd, obey_checkmode=False)
         if rc != 0:
             self.module.fail_json(
                 msg="Unable to get the next available uid",
@@ -1484,7 +1555,7 @@ class DarwinUser(User):
     def _change_user_password(self):
         '''Change password for SELF.NAME against SELF.PASSWORD.
 
-        Please note that password must be cleatext.
+        Please note that password must be cleartext.
         '''
         # some documentation on how is stored passwords on OSX:
         # http://blog.lostpassword.com/2012/07/cracking-mac-os-x-lion-accounts-passwords/
@@ -1500,8 +1571,7 @@ class DarwinUser(User):
             cmd += [ '-create', '/Users/%s' % self.name, 'Password', '*']
         (rc, out, err) = self.execute_command(cmd)
         if rc != 0:
-            self.module.fail_json(msg='Error when changing password',
-                                  err=err, out=out, rc=rc)
+            self.module.fail_json(msg='Error when changing password', err=err, out=out, rc=rc)
         return (rc, out, err)
 
     def _make_group_numerical(self):
@@ -1517,23 +1587,21 @@ class DarwinUser(User):
 
     def __modify_group(self, group, action):
         '''Add or remove SELF.NAME to or from GROUP depending on ACTION.
-        ACTION can be 'add' or 'remove' otherwhise 'remove' is assumed. '''
+        ACTION can be 'add' or 'remove' otherwise 'remove' is assumed. '''
         if action == 'add':
             option = '-a'
         else:
             option = '-d'
-        cmd = [ 'dseditgroup', '-o', 'edit', option, self.name,
-                '-t', 'user', group ]
+        cmd = [ 'dseditgroup', '-o', 'edit', option, self.name, '-t', 'user', group ]
         (rc, out, err) = self.execute_command(cmd)
         if rc != 0:
             self.module.fail_json(msg='Cannot %s user "%s" to group "%s".'
-                                  % (action, self.name, group),
-                                  err=err, out=out, rc=rc)
+                                  % (action, self.name, group), err=err, out=out, rc=rc)
         return (rc, out, err)
 
     def _modify_group(self):
         '''Add or remove SELF.NAME to or from GROUP depending on ACTION.
-        ACTION can be 'add' or 'remove' otherwhise 'remove' is assumed. '''
+        ACTION can be 'add' or 'remove' otherwise 'remove' is assumed. '''
 
         rc = 0
         out = ''
@@ -1546,12 +1614,13 @@ class DarwinUser(User):
         else:
             target = set([])
 
-        for remove in current - target:
-            (_rc, _err, _out) = self.__modify_group(remove, 'delete')
-            rc += rc
-            out += _out
-            err += _err
-            changed = True
+        if self.append is False:
+            for remove in current - target:
+                (_rc, _err, _out) = self.__modify_group(remove, 'delete')
+                rc += rc
+                out += _out
+                err += _err
+                changed = True
 
         for add in target - current:
             (_rc, _err, _out) = self.__modify_group(add, 'add')
@@ -1571,7 +1640,7 @@ class DarwinUser(User):
 
         # http://support.apple.com/kb/HT5017?viewlocale=en_US
         cmd = [ 'defaults', 'read', plist_file, 'HiddenUsersList' ]
-        (rc, out, err) = self.execute_command(cmd)
+        (rc, out, err) = self.execute_command(cmd, obey_checkmode=False)
         # returned value is
         # (
         #   "_userA",
@@ -1592,28 +1661,23 @@ class DarwinUser(User):
                         'HiddenUsersList', '-array-add', self.name ]
                 (rc, out, err) = self.execute_command(cmd)
                 if rc != 0:
-                    self.module.fail_json(
-                        msg='Cannot user "%s" to hidden user list.'
-                        % self.name, err=err, out=out, rc=rc)
+                    self.module.fail_json( msg='Cannot user "%s" to hidden user list.' % self.name, err=err, out=out, rc=rc)
                 return 0
         else:
             if self.name in hidden_users:
                 del(hidden_users[hidden_users.index(self.name)])
 
-                cmd = [ 'defaults', 'write', plist_file,
-                        'HiddenUsersList', '-array' ] +  hidden_users
+                cmd = [ 'defaults', 'write', plist_file, 'HiddenUsersList', '-array' ] +  hidden_users
                 (rc, out, err) = self.execute_command(cmd)
                 if rc != 0:
-                    self.module.fail_json(
-                        msg='Cannot remove user "%s" from hidden user list.'
-                        % self.name, err=err, out=out, rc=rc)
+                    self.module.fail_json( msg='Cannot remove user "%s" from hidden user list.' % self.name, err=err, out=out, rc=rc)
                 return 0
 
     def user_exists(self):
         '''Check is SELF.NAME is a known user on the system.'''
         cmd = self._get_dscl()
         cmd += [ '-list', '/Users/%s' % self.name]
-        (rc, out, err) = self.execute_command(cmd)
+        (rc, out, err) = self.execute_command(cmd, obey_checkmode=False)
         return rc == 0
 
     def remove_user(self):
@@ -1625,9 +1689,7 @@ class DarwinUser(User):
         (rc, out, err) = self.execute_command(cmd)
 
         if rc != 0:
-            self.module.fail_json(
-                msg='Cannot delete user "%s".'
-                % self.name, err=err, out=out, rc=rc)
+            self.module.fail_json( msg='Cannot delete user "%s".' % self.name, err=err, out=out, rc=rc)
 
         if self.force:
             if os.path.exists(info[5]):
@@ -1641,9 +1703,7 @@ class DarwinUser(User):
         cmd += [ '-create', '/Users/%s' % self.name]
         (rc, err, out) = self.execute_command(cmd)
         if rc != 0:
-            self.module.fail_json(
-                msg='Cannot create user "%s".'
-                % self.name, err=err, out=out, rc=rc)
+            self.module.fail_json( msg='Cannot create user "%s".' % self.name, err=err, out=out, rc=rc)
 
 
         self._make_group_numerical()
@@ -1654,20 +1714,19 @@ class DarwinUser(User):
         if self.createhome:
             if self.home is None:
                 self.home = '/Users/%s' % self.name
-            if not os.path.exists(self.home):
-                os.makedirs(self.home)
-            self.chown_homedir(int(self.uid), int(self.group), self.home)
+            if not self.module.check_mode:
+                if not os.path.exists(self.home):
+                    os.makedirs(self.home)
+                self.chown_homedir(int(self.uid), int(self.group), self.home)
 
         for field in self.fields:
-            if self.__dict__.has_key(field[0]) and self.__dict__[field[0]]:
+            if field[0] in self.__dict__ and self.__dict__[field[0]]:
 
                 cmd = self._get_dscl()
-                cmd += [ '-create', '/Users/%s' % self.name,
-                         field[1], self.__dict__[field[0]]]
+                cmd += [ '-create', '/Users/%s' % self.name, field[1], self.__dict__[field[0]]]
                 (rc, _err, _out) = self.execute_command(cmd)
                 if rc != 0:
-                    self.module.fail_json(
-                        msg='Cannot add property "%s" to user "%s".'
+                    self.module.fail_json( msg='Cannot add property "%s" to user "%s".'
                         % (field[0], self.name), err=err, out=out, rc=rc)
 
                 out += _out
@@ -1698,12 +1757,11 @@ class DarwinUser(User):
             self._make_group_numerical()
 
         for field in self.fields:
-            if self.__dict__.has_key(field[0]) and self.__dict__[field[0]]:
+            if field[0] in self.__dict__ and self.__dict__[field[0]]:
                 current = self._get_user_property(field[1])
                 if current is None or current != self.__dict__[field[0]]:
                     cmd = self._get_dscl()
-                    cmd += [ '-create', '/Users/%s' % self.name,
-                             field[1], self.__dict__[field[0]]]
+                    cmd += [ '-create', '/Users/%s' % self.name, field[1], self.__dict__[field[0]]]
                     (rc, _err, _out) = self.execute_command(cmd)
                     if rc != 0:
                         self.module.fail_json(
@@ -1864,8 +1922,6 @@ class AIX(User):
         # skip if no changes to be made
         if len(cmd) == 1:
             (rc, out, err) = (None, '', '')
-        elif self.module.check_mode:
-            return (True, '', '')
         else:
             cmd.append(self.name)
             (rc, out, err) = self.execute_command(cmd)
@@ -2031,8 +2087,6 @@ class HPUX(User):
         # skip if no changes to be made
         if len(cmd) == 1:
             return (None, '', '')
-        elif self.module.check_mode:
-            return (0, '', '')
 
         cmd.append(self.name)
         return self.execute_command(cmd)
@@ -2041,7 +2095,7 @@ class HPUX(User):
 
 def main():
     ssh_defaults = {
-            'bits': '2048',
+            'bits': 0,
             'type': 'rsa',
             'passphrase': None,
             'comment': 'ansible-generated on %s' % socket.gethostname()
@@ -2053,9 +2107,9 @@ def main():
             uid=dict(default=None, type='str'),
             non_unique=dict(default='no', type='bool'),
             group=dict(default=None, type='str'),
-            groups=dict(default=None, type='str'),
+            groups=dict(default=None, type='list'),
             comment=dict(default=None, type='str'),
-            home=dict(default=None, type='str'),
+            home=dict(default=None, type='path'),
             shell=dict(default=None, type='str'),
             password=dict(default=None, type='str', no_log=True),
             login_class=dict(default=None, type='str'),
@@ -2073,9 +2127,9 @@ def main():
             append=dict(default='no', type='bool'),
             # following are specific to ssh key generation
             generate_ssh_key=dict(type='bool'),
-            ssh_key_bits=dict(default=ssh_defaults['bits'], type='str'),
+            ssh_key_bits=dict(default=ssh_defaults['bits'], type='int'),
             ssh_key_type=dict(default=ssh_defaults['type'], type='str'),
-            ssh_key_file=dict(default=None, type='str'),
+            ssh_key_file=dict(default=None, type='path'),
             ssh_key_comment=dict(default=ssh_defaults['comment'], type='str'),
             ssh_key_passphrase=dict(default=None, type='str', no_log=True),
             update_password=dict(default='always',choices=['always','on_create'],type='str'),
@@ -2110,8 +2164,11 @@ def main():
             if module.check_mode:
                 module.exit_json(changed=True)
             (rc, out, err) = user.create_user()
-            result['system'] = user.system
-            result['createhome'] = user.createhome
+            if module.check_mode:
+                result['system'] = user.name
+            else:
+                result['system'] = user.system
+                result['createhome'] = user.createhome
         else:
             # modify user (note: this function is check mode aware)
             (rc, out, err) = user.modify_user()

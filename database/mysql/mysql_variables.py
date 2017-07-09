@@ -22,6 +22,10 @@ You should have received a copy of the GNU General Public License
 along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 """
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: mysql_variables
@@ -40,38 +44,20 @@ options:
         description:
             - If set, then sets variable value to this
         required: False
-    login_user:
-        description:
-            - username to connect mysql host, if defined login_password also needed.
-        required: False
-    login_password:
-        description:
-            - password to connect mysql host, if defined login_user also needed.
-        required: False
-    login_host:
-        description:
-            - mysql host to connect
-        required: False
-    login_port:
-        version_added: "2.0"
-        description:
-            - mysql port to connect
-        required: False
-    login_unix_socket:
-        description:
-            - unix socket to connect mysql server
+extends_documentation_fragment: mysql
 '''
 EXAMPLES = '''
 # Check for sync_binlog setting
-- mysql_variables: variable=sync_binlog
+- mysql_variables:
+    variable: sync_binlog
 
 # Set read_only variable to 1
-- mysql_variables: variable=read_only value=1
+- mysql_variables:
+    variable: read_only
+    value: 1
 '''
 
 
-import ConfigParser
-import os
 import warnings
 from re import match
 
@@ -130,122 +116,58 @@ def setvariable(cursor, mysqlvar, value):
         cursor.execute(query + "%s", (value,))
         cursor.fetchall()
         result = True
-    except Exception, e:
+    except Exception:
+        e = get_exception()
         result = str(e)
     return result
-
-
-def strip_quotes(s):
-    """ Remove surrounding single or double quotes
-
-    >>> print strip_quotes('hello')
-    hello
-    >>> print strip_quotes('"hello"')
-    hello
-    >>> print strip_quotes("'hello'")
-    hello
-    >>> print strip_quotes("'hello")
-    'hello
-
-    """
-    single_quote = "'"
-    double_quote = '"'
-
-    if s.startswith(single_quote) and s.endswith(single_quote):
-        s = s.strip(single_quote)
-    elif s.startswith(double_quote) and s.endswith(double_quote):
-        s = s.strip(double_quote)
-    return s
-
-
-def config_get(config, section, option):
-    """ Calls ConfigParser.get and strips quotes
-
-    See: http://dev.mysql.com/doc/refman/5.0/en/option-files.html
-    """
-    return strip_quotes(config.get(section, option))
-
-
-def load_mycnf():
-    config = ConfigParser.RawConfigParser()
-    mycnf = os.path.expanduser('~/.my.cnf')
-    if not os.path.exists(mycnf):
-        return False
-    try:
-        config.readfp(open(mycnf))
-    except (IOError):
-        return False
-    # We support two forms of passwords in .my.cnf, both pass= and password=,
-    # as these are both supported by MySQL.
-    try:
-        passwd = config_get(config, 'client', 'password')
-    except (ConfigParser.NoOptionError):
-        try:
-            passwd = config_get(config, 'client', 'pass')
-        except (ConfigParser.NoOptionError):
-            return False
-
-    # If .my.cnf doesn't specify a user, default to user login name
-    try:
-        user = config_get(config, 'client', 'user')
-    except (ConfigParser.NoOptionError):
-        user = getpass.getuser()
-    creds = dict(user=user, passwd=passwd)
-    return creds
-
 
 def main():
     module = AnsibleModule(
             argument_spec = dict(
             login_user=dict(default=None),
-            login_password=dict(default=None),
-            login_host=dict(default="127.0.0.1"),
-            login_port=dict(default="3306", type='int'),
+            login_password=dict(default=None, no_log=True),
+            login_host=dict(default="localhost"),
+            login_port=dict(default=3306, type='int'),
             login_unix_socket=dict(default=None),
             variable=dict(default=None),
-            value=dict(default=None)
-
+            value=dict(default=None),
+            ssl_cert=dict(default=None),
+            ssl_key=dict(default=None),
+            ssl_ca=dict(default=None),
+            connect_timeout=dict(default=30, type='int'),
+            config_file=dict(default="~/.my.cnf", type="path")
         )
     )
     user = module.params["login_user"]
     password = module.params["login_password"]
-    host = module.params["login_host"]
-    port = module.params["login_port"]
+    ssl_cert = module.params["ssl_cert"]
+    ssl_key = module.params["ssl_key"]
+    ssl_ca = module.params["ssl_ca"]
+    connect_timeout = module.params['connect_timeout']
+    config_file = module.params['config_file']
+    db = 'mysql'
+
     mysqlvar = module.params["variable"]
     value = module.params["value"]
     if mysqlvar is None:
         module.fail_json(msg="Cannot run without variable to operate with")
     if match('^[0-9a-z_]+$', mysqlvar) is None:
-	    module.fail_json(msg="invalid variable name \"%s\"" % mysqlvar)
+        module.fail_json(msg="invalid variable name \"%s\"" % mysqlvar)
     if not mysqldb_found:
         module.fail_json(msg="the python mysqldb module is required")
     else:
         warnings.filterwarnings('error', category=MySQLdb.Warning)
 
-    # Either the caller passes both a username and password with which to connect to
-    # mysql, or they pass neither and allow this module to read the credentials from
-    # ~/.my.cnf.
-    login_password = module.params["login_password"]
-    login_user = module.params["login_user"]
-    if login_user is None and login_password is None:
-        mycnf_creds = load_mycnf()
-        if mycnf_creds is False:
-            login_user = "root"
-            login_password = ""
-        else:
-            login_user = mycnf_creds["user"]
-            login_password = mycnf_creds["passwd"]
-    elif login_password is None or login_user is None:
-        module.fail_json(msg="when supplying login arguments, both login_user and login_password must be provided")
     try:
-        if module.params["login_unix_socket"]:
-            db_connection = MySQLdb.connect(host=module.params["login_host"], port=module.params["login_port"], unix_socket=module.params["login_unix_socket"], user=login_user, passwd=login_password, db="mysql")
+        cursor = mysql_connect(module, user, password, config_file, ssl_cert, ssl_key, ssl_ca, db,
+                               connect_timeout=connect_timeout)
+    except Exception:
+        e = get_exception()
+        if os.path.exists(config_file):
+            module.fail_json(msg="unable to connect to database, check login_user and login_password are correct or %s has the credentials. Exception message: %s" % (config_file, e))
         else:
-            db_connection = MySQLdb.connect(host=module.params["login_host"], port=module.params["login_port"], user=login_user, passwd=login_password, db="mysql")
-        cursor = db_connection.cursor()
-    except Exception, e:
-        errno, errstr = e.args
-        module.fail_json(msg="unable to connect to database, check login_user and login_password are correct or ~/.my.cnf has the credentials (ERROR: %s %s)" % (errno, errstr))
+            module.fail_json(msg="unable to find %s. Exception message: %s" % (config_file, e))
+
     mysqlvar_val = getvariable(cursor, mysqlvar)
     if mysqlvar_val is None:
         module.fail_json(msg="Variable not available \"%s\"" % mysqlvar, changed=False)
@@ -259,7 +181,8 @@ def main():
             module.exit_json(msg="Variable already set to requested value", changed=False)
         try:
             result = setvariable(cursor, mysqlvar, value_wanted)
-        except SQLParseError, e:
+        except SQLParseError:
+            e = get_exception()
             result = str(e)
         if result is True:
             module.exit_json(msg="Variable change succeeded prev_value=%s" % value_actual, changed=True)
@@ -269,4 +192,6 @@ def main():
 # import module snippets
 from ansible.module_utils.basic import *
 from ansible.module_utils.database import *
-main()
+from ansible.module_utils.mysql import *
+if __name__ == '__main__':
+    main()

@@ -14,6 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rds_param_group
@@ -47,7 +51,7 @@ options:
     required: false
     default: null
     aliases: []
-    choices: [ 'mysql5.1', 'mysql5.5', 'mysql5.6', 'oracle-ee-11.2', 'oracle-se-11.2', 'oracle-se1-11.2', 'postgres9.3', 'postgres9.4', 'sqlserver-ee-10.5', 'sqlserver-ee-11.0', 'sqlserver-ex-10.5', 'sqlserver-ex-11.0', 'sqlserver-se-10.5', 'sqlserver-se-11.0', 'sqlserver-web-10.5', 'sqlserver-web-11.0']
+    choices: [ 'aurora5.6', 'mariadb10.0', 'mysql5.1', 'mysql5.5', 'mysql5.6', 'mysql5.7', 'oracle-ee-11.2', 'oracle-ee-12.1', 'oracle-se-11.2', 'oracle-se-12.1', 'oracle-se1-11.2', 'oracle-se1-12.1', 'postgres9.3', 'postgres9.4', 'postgres9.5', sqlserver-ee-10.5', 'sqlserver-ee-11.0', 'sqlserver-ex-10.5', 'sqlserver-ex-11.0', 'sqlserver-ex-12.0', 'sqlserver-se-10.5', 'sqlserver-se-11.0', 'sqlserver-se-12.0', 'sqlserver-web-10.5', 'sqlserver-web-11.0', 'sqlserver-web-12.0' ]
   immediate:
     description:
       - Whether to apply the changes immediately, or after the next reboot of any associated instances.
@@ -60,7 +64,6 @@ options:
     required: false
     default: null
     aliases: []
-    choices: [ 'mysql5.1', 'mysql5.5', 'mysql5.6', 'oracle-ee-11.2', 'oracle-se-11.2', 'oracle-se1-11.2', 'postgres9.3', 'postgres9.4', 'sqlserver-ee-10.5', 'sqlserver-ee-11.0', 'sqlserver-ex-10.5', 'sqlserver-ex-11.0', 'sqlserver-se-10.5', 'sqlserver-se-11.0', 'sqlserver-web-10.5', 'sqlserver-web-11.0']
 author: "Scott Anderson (@tastychutney)"
 extends_documentation_fragment:
     - aws
@@ -84,22 +87,32 @@ EXAMPLES = '''
 '''
 
 VALID_ENGINES = [
+    'aurora5.6',
+    'mariadb10.0',
     'mysql5.1',
     'mysql5.5',
     'mysql5.6',
+    'mysql5.7',
     'oracle-ee-11.2',
+    'oracle-ee-12.1',
     'oracle-se-11.2',
+    'oracle-se-12.1',
     'oracle-se1-11.2',
+    'oracle-se1-12.1',
     'postgres9.3',
     'postgres9.4',
+    'postgres9.5',
     'sqlserver-ee-10.5',
     'sqlserver-ee-11.0',
     'sqlserver-ex-10.5',
     'sqlserver-ex-11.0',
+    'sqlserver-ex-12.0',
     'sqlserver-se-10.5',
     'sqlserver-se-11.0',
+    'sqlserver-se-12.0',
     'sqlserver-web-10.5',
     'sqlserver-web-11.0',
+    'sqlserver-web-12.0',
 ]
 
 try:
@@ -152,7 +165,7 @@ def set_parameter(param, value, immediate):
                 # may be based on a variable (ie. {foo*3/4}) so
                 # just pass it on through to boto
                 converted_value = str(value)
-        elif type(value) == bool:
+        elif isinstance(value, bool):
             converted_value = 1 if value else 0
         else:
             converted_value = int(value)
@@ -225,7 +238,7 @@ def main():
     immediate               = module.params.get('immediate') or False
 
     if state == 'present':
-        for required in ['name', 'description', 'engine', 'params']:
+        for required in ['name', 'description', 'engine']:
             if not module.params.get(required):
                 module.fail_json(msg = str("Parameter %s required for state='present'" % required))
     else:
@@ -240,8 +253,8 @@ def main():
         module.fail_json(msg = str("Either region or AWS_REGION or EC2_REGION environment variable or boto config aws_region or ec2_region must be set."))
 
     try:
-        conn = boto.rds.connect_to_region(region, **aws_connect_kwargs)
-    except boto.exception.BotoServerError, e:
+        conn = connect_to_aws(boto.rds, region, **aws_connect_kwargs)
+    except boto.exception.BotoServerError as e:
         module.fail_json(msg = e.error_message)
 
     group_was_added = False
@@ -252,7 +265,7 @@ def main():
         try:
             all_groups = conn.get_all_dbparameter_groups(group_name, max_records=100)
             exists = len(all_groups) > 0
-        except BotoServerError, e:
+        except BotoServerError as e:
             if e.error_code != 'DBParameterGroupNotFound':
                 module.fail_json(msg = e.error_message)
             exists = False
@@ -281,10 +294,10 @@ def main():
                 else:
                     break
 
-    except BotoServerError, e:
+    except BotoServerError as e:
         module.fail_json(msg = e.error_message)
 
-    except NotModifiableError, e:
+    except NotModifiableError as e:
         msg = e.error_message
         if group_was_added:
             msg = '%s The group "%s" was added first.' % (msg, group_name)
@@ -298,3 +311,4 @@ from ansible.module_utils.ec2 import *
 
 if __name__ == '__main__':
     main()
+

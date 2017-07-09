@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_clb
@@ -182,7 +186,7 @@ def cloud_load_balancer(module, state, name, meta, algorithm, port, protocol,
                                       algorithm=algorithm, protocol=protocol,
                                       timeout=timeout, virtual_ips=virtual_ips)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
         else:
             balancer = balancers[0]
@@ -240,7 +244,7 @@ def cloud_load_balancer(module, state, name, meta, algorithm, port, protocol,
             try:
                 balancer.delete()
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
             instance = rax_to_dict(balancer, 'clb')
@@ -305,4 +309,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 ### invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

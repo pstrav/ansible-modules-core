@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 module: rax_cdb_database
 short_description: 'create / delete a database in the Cloud Databases'
@@ -83,7 +87,7 @@ def save_database(module, cdb_id, name, character_set, collate):
 
     try:
         instance = cdb.get(cdb_id)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg='%s' % e.message)
 
     changed = False
@@ -95,7 +99,7 @@ def save_database(module, cdb_id, name, character_set, collate):
             database = instance.create_database(name=name,
                                                 character_set=character_set,
                                                 collate=collate)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
         else:
             changed = True
@@ -109,7 +113,7 @@ def delete_database(module, cdb_id, name):
 
     try:
         instance = cdb.get(cdb_id)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg='%s' % e.message)
 
     changed = False
@@ -119,7 +123,7 @@ def delete_database(module, cdb_id, name):
     if database:
         try:
             database.delete()
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
         else:
             changed = True
@@ -172,4 +176,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 # invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

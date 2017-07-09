@@ -23,6 +23,10 @@ except ImportError:
     HAS_SHADE = False
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: os_volume
@@ -35,8 +39,9 @@ description:
 options:
    size:
      description:
-        - Size of volume in GB
-     required: only when state is 'present'
+        - Size of volume in GB. This parameter is required when the
+          I(state) parameter is 'present'.
+     required: false
      default: None
    display_name:
      description:
@@ -153,7 +158,7 @@ def main():
         if state == 'absent':
             _absent_volume(module, cloud)
     except shade.OpenStackCloudException as e:
-        module.fail_json(msg=e.message)
+        module.fail_json(msg=str(e))
 
 # this is magic, see lib/ansible/module_common.py
 from ansible.module_utils.basic import *

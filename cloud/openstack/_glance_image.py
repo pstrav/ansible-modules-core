@@ -16,6 +16,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['deprecated'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: glance_image
@@ -44,7 +48,7 @@ options:
      description:
         - The keystone url for authentication
      required: false
-     default: 'http://127.0.0.1:35357/v2.0/'
+     default: http://127.0.0.1:35357/v2.0/
    region_name:
      description:
         - Name of the region
@@ -120,15 +124,16 @@ requirements:
 '''
 
 EXAMPLES = '''
-# Upload an image from an HTTP URL
-- glance_image: login_username=admin
-                login_password=passme
-                login_tenant_name=admin
-                name=cirros
-                container_format=bare
-                disk_format=qcow2
-                state=present
-                copy_from=http:launchpad.net/cirros/trunk/0.3.0/+download/cirros-0.3.0-x86_64-disk.img
+- name: Upload an image from an HTTP URL
+  glance_image:
+    login_username: admin
+    login_password: passme
+    login_tenant_name: admin
+    name: cirros
+    container_format: bare
+    disk_format: qcow2
+    state: present
+    copy_from: http://launchpad.net/cirros/trunk/0.3.0/+download/cirros-0.3.0-x86_64-disk.img
 '''
 
 import time
@@ -150,7 +155,7 @@ def _get_ksclient(module, kwargs):
                                  password=kwargs.get('login_password'),
                                  tenant_name=kwargs.get('login_tenant_name'),
                                  auth_url=kwargs.get('auth_url'))
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Error authenticating to the keystone: %s " % e.message)
     return client 
 
@@ -158,7 +163,7 @@ def _get_ksclient(module, kwargs):
 def _get_endpoint(module, client, endpoint_type):
     try:
         endpoint = client.service_catalog.url_for(service_type='image', endpoint_type=endpoint_type)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Error getting endpoint for glance: %s" % e.message)
     return endpoint
 
@@ -172,7 +177,7 @@ def _get_glance_client(module, kwargs):
     }
     try:
         client = glanceclient.Client('1', endpoint, **kwargs)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Error in connecting to glance: %s" % e.message)
     return client
 
@@ -183,7 +188,7 @@ def _glance_image_present(module, params, client):
             if image.name == params['name']:
                 return image.id 
         return None
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Error in fetching image list: %s" % e.message)
 
 
@@ -207,7 +212,7 @@ def _glance_image_create(module, params, client):
             if image.status == 'active':
                 break
             time.sleep(5)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Error in creating image: %s" % e.message)
     if image.status == 'active':
         module.exit_json(changed=True, result=image.status, id=image.id)
@@ -220,7 +225,7 @@ def _glance_delete_image(module, params, client):
         for image in client.images.list():
             if image.name == params['name']:
                 client.images.delete(image)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg="Error in deleting image: %s" % e.message)
     module.exit_json(changed=True, result="Deleted")
 
@@ -247,9 +252,9 @@ def main():
         mutually_exclusive = [['file','copy_from']],
     )
 
-    if not HAVE_GLANCECLIENT:
+    if not HAS_GLANCECLIENT:
         module.fail_json(msg='python-glanceclient is required for this module')
-    if not HAVE_KEYSTONECLIENT:
+    if not HAS_KEYSTONECLIENT:
         module.fail_json(msg='python-keystoneclient is required for this module')
 
     if module.params['state'] == 'present':

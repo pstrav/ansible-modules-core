@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax
@@ -182,7 +186,7 @@ options:
     description:
       - how long before wait gives up, in seconds
     default: 300
-author: 
+author:
     - "Jesse Keating (@j2sol)"
     - "Matt Martz (@sivel)"
 notes:
@@ -285,12 +289,13 @@ def create(module, names=[], flavor=None, image=None, meta={}, key_name=None,
     if user_data:
         config_drive = True
 
-    if user_data and os.path.isfile(user_data):
+    if user_data and os.path.isfile(os.path.expanduser(user_data)):
         try:
+            user_data = os.path.expanduser(user_data)
             f = open(user_data)
             user_data = f.read()
             f.close()
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='Failed to load %s' % user_data)
 
     # Handle the file contents
@@ -300,7 +305,7 @@ def create(module, names=[], flavor=None, image=None, meta={}, key_name=None,
             fileobj = open(lpath, 'r')
             files[rpath] = fileobj.read()
             fileobj.close()
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='Failed to load %s' % lpath)
     try:
         servers = []
@@ -315,7 +320,7 @@ def create(module, names=[], flavor=None, image=None, meta={}, key_name=None,
                                              userdata=user_data,
                                              block_device_mapping_v2=bdmv2,
                                              **extra_create_args))
-    except Exception, e:
+    except Exception as e:
         if e.message:
             msg = str(e.message)
         else:
@@ -397,7 +402,7 @@ def delete(module, instance_ids=[], wait=True, wait_timeout=300, kept=[]):
     for server in servers:
         try:
             server.delete()
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg=e.message)
         else:
             changed = True
@@ -545,7 +550,7 @@ def cloudservers(module, state=None, name=None, flavor=None, image=None,
                 # %d to the end
                 try:
                     name % 0
-                except TypeError, e:
+                except TypeError as e:
                     if e.message.startswith('not all'):
                         name = '%s%%d' % name
                     else:
@@ -635,7 +640,7 @@ def cloudservers(module, state=None, name=None, flavor=None, image=None,
                     # %d to the end
                     try:
                         name % 0
-                    except TypeError, e:
+                    except TypeError as e:
                         if e.message.startswith('not all'):
                             name = '%s%%d' % name
                         else:
@@ -889,4 +894,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 # invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

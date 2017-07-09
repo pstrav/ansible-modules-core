@@ -17,6 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['deprecated'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: ec2_ami_search
@@ -29,7 +33,6 @@ description:
   - If there is no AKI or ARI associated with an image, these will be C(null).
   - Only supports images from cloud-images.ubuntu.com
   - 'Example output: C({"ami": "ami-69f5a900", "changed": false, "aki": "aki-88aa75e1", "tag": "release", "ari": null, "serial": "20131024"})'
-version_added: "1.6"
 options:
   distro:
     description: Linux distribution (e.g., C(ubuntu))
@@ -57,9 +60,9 @@ options:
     description: EC2 region
     required: false
     default: us-east-1
-    choices: ["ap-northeast-1", "ap-southeast-1", "ap-southeast-2",
-              "eu-central-1", "eu-west-1", "sa-east-1", "us-east-1",
-              "us-west-1", "us-west-2", "us-gov-west-1"]
+    choices: ["ap-northeast-1", "ap-southeast-1", "ap-northeast-2",
+              "ap-southeast-2", "eu-central-1", "eu-west-1", "sa-east-1",
+              "us-east-1", "us-west-1", "us-west-2", "us-gov-west-1"]
   virt:
     description: virutalization type
     required: false
@@ -75,10 +78,18 @@ EXAMPLES = '''
   connection: local
   tasks:
   - name: Get the Ubuntu precise AMI
-    ec2_ami_search: distro=ubuntu release=precise region=us-west-1 store=instance-store
+    ec2_ami_search:
+      distro: ubuntu
+      release: precise
+      region: us-west-1
+      store: instance-store
     register: ubuntu_image
+
   - name: Start the EC2 instance
-    ec2: image={{ ubuntu_image.ami }} instance_type=m1.small key_name=mykey
+    ec2:
+      image: "{{ ubuntu_image.ami }}"
+      instance_type: m1.small
+      key_name: mykey
 '''
 
 import csv
@@ -89,7 +100,9 @@ SUPPORTED_DISTROS = ['ubuntu']
 
 AWS_REGIONS = ['ap-northeast-1',
                'ap-southeast-1',
+               'ap-northeast-2',
                'ap-southeast-2',
+               'ap-south-1',
                'eu-central-1',
                'eu-west-1',
                'sa-east-1',

@@ -17,6 +17,8 @@
 # WANT_JSON
 # POWERSHELL_COMMON
 
+$ErrorActionPreference = "Stop"
+
 $params = Parse-Args $args
 
 # path
@@ -100,7 +102,7 @@ Else
 
     If ( $state -eq "directory" )
     {
-        New-Item -ItemType directory -Path $path
+        New-Item -ItemType directory -Path $path | Out-Null
         $result.changed = $TRUE
     }
 

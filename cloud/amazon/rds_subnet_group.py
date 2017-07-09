@@ -14,6 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rds_subnet_group
@@ -112,8 +116,8 @@ def main():
         module.fail_json(msg = str("Either region or AWS_REGION or EC2_REGION environment variable or boto config aws_region or ec2_region must be set."))
 
     try:
-        conn = boto.rds.connect_to_region(region, **aws_connect_kwargs)
-    except boto.exception.BotoServerError, e:
+        conn = connect_to_aws(boto.rds, region, **aws_connect_kwargs)
+    except boto.exception.BotoServerError as e:
         module.fail_json(msg = e.error_message)
 
     try:
@@ -123,7 +127,7 @@ def main():
         try:
             matching_groups = conn.get_all_db_subnet_groups(group_name, max_records=100)
             exists = len(matching_groups) > 0
-        except BotoServerError, e:
+        except BotoServerError as e:
             if e.error_code != 'DBSubnetGroupNotFoundFault':
                 module.fail_json(msg = e.error_message)
         
@@ -142,7 +146,7 @@ def main():
                 if ( (matching_groups[0].name != group_name) or (matching_groups[0].description != group_description) or (matching_groups[0].subnet_ids != group_subnets) ):
                     changed_group = conn.modify_db_subnet_group(group_name, description=group_description, subnet_ids=group_subnets)
                     changed = True
-    except BotoServerError, e:
+    except BotoServerError as e:
         module.fail_json(msg = e.error_message)
 
     module.exit_json(changed=changed)
@@ -151,4 +155,5 @@ def main():
 from ansible.module_utils.basic import *
 from ansible.module_utils.ec2 import *
 
-main()
+if __name__ == '__main__':
+    main()

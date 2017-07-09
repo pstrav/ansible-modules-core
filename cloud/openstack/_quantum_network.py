@@ -26,6 +26,10 @@ try:
 except ImportError:
     HAVE_DEPS = False
 
+ANSIBLE_METADATA = {'status': ['deprecated'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: quantum_network
@@ -59,7 +63,7 @@ options:
      description:
         - The keystone url for authentication
      required: false
-     default: 'http://127.0.0.1:35357/v2.0/'
+     default: http://127.0.0.1:35357/v2.0/
    region_name:
      description:
         - Name of the region
@@ -72,7 +76,7 @@ options:
      default: present
    name:
      description:
-        - Name to be assigned to the nework
+        - Name to be assigned to the network
      required: true
      default: None
    provider_network_type:
@@ -113,15 +117,26 @@ requirements:
 '''
 
 EXAMPLES = '''
-# Create a GRE backed Quantum network with tunnel id 1 for tenant1
-- quantum_network: name=t1network tenant_name=tenant1 state=present
-                   provider_network_type=gre provider_segmentation_id=1
-                   login_username=admin login_password=admin login_tenant_name=admin
+- name: Create a GRE backed Quantum network with tunnel id 1 for tenant1
+  quantum_network:
+    name: t1network
+    tenant_name: tenant1
+    state: present
+    provider_network_type: gre
+    provider_segmentation_id: 1
+    login_username: admin
+    login_password: admin
+    login_tenant_name: admin
 
-# Create an external network
-- quantum_network: name=external_network state=present
-                   provider_network_type=local router_external=yes
-                   login_username=admin login_password=admin login_tenant_name=admin
+- name: Create an external network
+  quantum_network:
+    name: external_network
+    state: present
+    provider_network_type: local
+    router_external: yes
+    login_username: admin
+    login_password: admin
+    login_tenant_name: admin
 '''
 
 _os_keystone = None
@@ -133,7 +148,7 @@ def _get_ksclient(module, kwargs):
                                  password=kwargs.get('login_password'),
                                  tenant_name=kwargs.get('login_tenant_name'),
                                  auth_url=kwargs.get('auth_url'))
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error authenticating to the keystone: %s" %e.message)
     global _os_keystone
     _os_keystone = kclient
@@ -143,7 +158,7 @@ def _get_ksclient(module, kwargs):
 def _get_endpoint(module, ksclient):
     try:
         endpoint = ksclient.service_catalog.url_for(service_type='network', endpoint_type='publicURL')
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error getting network endpoint: %s " %e.message)
     return endpoint
 
@@ -157,7 +172,7 @@ def _get_neutron_client(module, kwargs):
     }
     try:
         neutron = client.Client('2.0', **kwargs)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = " Error in connecting to neutron: %s " %e.message)
     return neutron
 
@@ -182,7 +197,7 @@ def _get_net_id(neutron, module):
     }
     try:
         networks = neutron.list_networks(**kwargs)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error in listing neutron networks: %s" % e.message)
     if not networks['networks']:
         return None
@@ -220,7 +235,7 @@ def _create_network(module, neutron):
 
     try:
         net = neutron.create_network({'network':network})
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error in creating network: %s" % e.message)
     return net['network']['id']
 
@@ -228,7 +243,7 @@ def _delete_network(module, net_id, neutron):
 
     try:
         id = neutron.delete_network(net_id)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error in deleting the network: %s" % e.message)
     return True
 

@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_keypair
@@ -109,7 +113,7 @@ def rax_keypair(module, name, public_key, state):
                 f = open(public_key)
                 public_key = f.read()
                 f.close()
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='Failed to load %s' % public_key)
 
         try:
@@ -118,9 +122,9 @@ def rax_keypair(module, name, public_key, state):
             try:
                 keypair = cs.keypairs.create(name, public_key)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
 
     elif state == 'absent':
@@ -133,7 +137,7 @@ def rax_keypair(module, name, public_key, state):
             try:
                 keypair.delete()
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
     module.exit_json(changed=changed, keypair=rax_to_dict(keypair))
@@ -171,4 +175,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 ### invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

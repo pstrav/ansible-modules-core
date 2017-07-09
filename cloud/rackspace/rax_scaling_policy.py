@@ -16,6 +16,10 @@
 
 # This is a DOCUMENTATION stub specific to this module, it extends
 # a documentation fragment located in ansible.utils.module_docs_fragments
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: rax_scaling_policy
@@ -141,12 +145,12 @@ def rax_asp(module, at=None, change=0, cron=None, cooldown=300,
     except ValueError:
         try:
             sg = au.find(name=scaling_group)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
     else:
         try:
             sg = au.get(scaling_group)
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
 
     if state == 'present':
@@ -168,7 +172,7 @@ def rax_asp(module, at=None, change=0, cron=None, cooldown=300,
                                        desired_capacity=desired_capacity,
                                        args=args)
                 changed = True
-            except Exception, e:
+            except Exception as e:
                 module.fail_json(msg='%s' % e.message)
 
         else:
@@ -217,7 +221,7 @@ def rax_asp(module, at=None, change=0, cron=None, cooldown=300,
             else:
                 policy.delete()
                 changed = True
-        except Exception, e:
+        except Exception as e:
             module.fail_json(msg='%s' % e.message)
 
         module.exit_json(changed=changed, autoscale_policy=rax_to_dict(policy))
@@ -280,4 +284,6 @@ from ansible.module_utils.basic import *
 from ansible.module_utils.rax import *
 
 # invoke the module
-main()
+
+if __name__ == '__main__':
+    main()

@@ -21,6 +21,10 @@ try:
 except ImportError:
     HAS_SHADE = False
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: os_subnets_facts
@@ -46,28 +50,34 @@ extends_documentation_fragment: openstack
 '''
 
 EXAMPLES = '''
-# Gather facts about previously created subnets
-- os_subnets_facts:
+- name: Gather facts about previously created subnets
+  os_subnets_facts:
     auth:
       auth_url: https://your_api_url.com:9000/v2.0
       username: user
       password: password
       project_name: someproject
-- debug: var=openstack_subnets
 
-# Gather facts about a previously created subnet by name
-- os_subnets_facts:
+- name: Show openstack subnets
+  debug:
+    var: openstack_subnets
+
+- name: Gather facts about a previously created subnet by name
+  os_subnets_facts:
     auth:
       auth_url: https://your_api_url.com:9000/v2.0
       username: user
       password: password
       project_name: someproject
-    name:  subnet1
-- debug: var=openstack_subnets
+    name: subnet1
 
-# Gather facts about a previously created subnet with filter (note: name and
-  filters parameters are Not mutually exclusive)
-- os_subnets_facts:
+- name: Show openstack subnets
+  debug:
+    var: openstack_subnets
+
+- name: Gather facts about a previously created subnet with filter
+  # Note: name and filters parameters are not mutually exclusive
+  os_subnets_facts:
     auth:
       auth_url: https://your_api_url.com:9000/v2.0
       username: user
@@ -75,7 +85,10 @@ EXAMPLES = '''
       project_name: someproject
     filters:
       tenant_id: 55e2ce24b2a245b09f181bf025724cbe
-- debug: var=openstack_subnets
+
+- name: Show openstack subnets
+  debug:
+    var: openstack_subnets
 '''
 
 RETURN = '''
@@ -130,7 +143,7 @@ def main():
 
     argument_spec = openstack_full_argument_spec(
         name=dict(required=False, default=None),
-        filters=dict(required=False, default=None)
+        filters=dict(required=False, type='dict', default=None)
     )
     module = AnsibleModule(argument_spec)
 
@@ -145,7 +158,7 @@ def main():
             openstack_subnets=subnets))
 
     except shade.OpenStackCloudException as e:
-        module.fail_json(msg=e.message)
+        module.fail_json(msg=str(e))
 
 # this is magic, see lib/ansible/module_common.py
 from ansible.module_utils.basic import *

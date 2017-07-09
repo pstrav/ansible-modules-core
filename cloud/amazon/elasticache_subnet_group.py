@@ -14,6 +14,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: elasticache_subnet_group
@@ -113,7 +117,7 @@ def main():
         endpoint = "elasticache.%s.amazonaws.com" % region
         connect_region = RegionInfo(name=region, endpoint=endpoint)
         conn = ElastiCacheConnection(region=connect_region, **aws_connect_kwargs)
-    except boto.exception.NoAuthHandlerFound, e:
+    except boto.exception.NoAuthHandlerFound as e:
         module.fail_json(msg=e.message)
 
     try:
@@ -123,7 +127,7 @@ def main():
         try:
             matching_groups = conn.describe_cache_subnet_groups(group_name, max_records=100)
             exists = len(matching_groups) > 0
-        except BotoServerError, e:
+        except BotoServerError as e:
             if e.error_code != 'CacheSubnetGroupNotFoundFault':
                 module.fail_json(msg = e.error_message)
 
@@ -139,7 +143,7 @@ def main():
                 changed_group = conn.modify_cache_subnet_group(group_name, cache_subnet_group_description=group_description, subnet_ids=group_subnets)
                 changed = True
 
-    except BotoServerError, e:
+    except BotoServerError as e:
         if e.error_message != 'No modifications were requested.':
             module.fail_json(msg = e.error_message)
         else:
@@ -151,4 +155,5 @@ def main():
 from ansible.module_utils.basic import *
 from ansible.module_utils.ec2 import *
 
-main()
+if __name__ == '__main__':
+    main()

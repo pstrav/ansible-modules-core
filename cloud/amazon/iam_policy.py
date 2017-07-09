@@ -13,6 +13,10 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: iam_policy
@@ -94,7 +98,7 @@ task:
     policy_name: "READ-ONLY"
     policy_document: readonlypolicy.json
     state: present
-  with_items: new_groups.results
+  with_items: "{{ new_groups.results }}"
 
 # Create a new S3 policy with prefix per user
 tasks:
@@ -139,6 +143,7 @@ def user_action(module, iam, name, policy_name, skip, pdoc, state):
     current_policies = [cp for cp in iam.get_all_user_policies(name).
                                         list_user_policies_result.
                                         policy_names]
+    matching_policies = []
     for pol in current_policies:
       '''
       urllib is needed here because boto returns url encoded strings instead
@@ -146,21 +151,20 @@ def user_action(module, iam, name, policy_name, skip, pdoc, state):
       if urllib.unquote(iam.get_user_policy(name, pol).
                         get_user_policy_result.policy_document) == pdoc:
         policy_match = True
-        if policy_match:
-          msg=("The policy document you specified already exists "
-               "under the name %s." % pol)
-    if state == 'present' and skip:
-      if policy_name not in current_policies and not policy_match:
-        changed = True
-        iam.put_user_policy(name, policy_name, pdoc)
-    elif state == 'present' and not skip:
+        matching_policies.append(pol)
+
+    if state == 'present':
+      # If policy document does not already exist (either it's changed
+      # or the policy is not present) or if we're not skipping dupes then
+      # make the put call.  Note that the put call does a create or update.
+      if not policy_match or (not skip and policy_name not in matching_policies):
         changed = True
         iam.put_user_policy(name, policy_name, pdoc)
     elif state == 'absent':
       try:
         iam.delete_user_policy(name, policy_name)
         changed = True
-      except boto.exception.BotoServerError, err:
+      except boto.exception.BotoServerError as err:
         error_msg = boto_exception(err)
         if 'cannot be found.' in error_msg:
           changed = False
@@ -169,7 +173,7 @@ def user_action(module, iam, name, policy_name, skip, pdoc, state):
     updated_policies = [cp for cp in iam.get_all_user_policies(name).
                                         list_user_policies_result.
                                         policy_names]
-  except boto.exception.BotoServerError, err:
+  except boto.exception.BotoServerError as err:
     error_msg = boto_exception(err)
     module.fail_json(changed=changed, msg=error_msg)
 
@@ -186,40 +190,42 @@ def role_action(module, iam, name, policy_name, skip, pdoc, state):
   except boto.exception.BotoServerError as e:
     if e.error_code == "NoSuchEntity":
       # Role doesn't exist so it's safe to assume the policy doesn't either
-      module.exit_json(changed=False)
+      module.exit_json(changed=False, msg="No such role, policy will be skipped.")
     else:
       module.fail_json(msg=e.message)
-      
-  try:    
+
+  try:
+    matching_policies = []
     for pol in current_policies:
       if urllib.unquote(iam.get_role_policy(name, pol).
                         get_role_policy_result.policy_document) == pdoc:
         policy_match = True
-        if policy_match:
-          msg=("The policy document you specified already exists "
-               "under the name %s." % pol)
-    if state == 'present' and skip:
-      if policy_name not in current_policies and not policy_match:
-        changed = True
-        iam.put_role_policy(name, policy_name, pdoc)
-    elif state == 'present' and not skip:
+        matching_policies.append(pol)
+
+    if state == 'present':
+      # If policy document does not already exist (either it's changed
+      # or the policy is not present) or if we're not skipping dupes then
+      # make the put call.  Note that the put call does a create or update.
+      if not policy_match or (not skip and policy_name not in matching_policies):
         changed = True
         iam.put_role_policy(name, policy_name, pdoc)
     elif state == 'absent':
       try:
         iam.delete_role_policy(name, policy_name)
         changed = True
-      except boto.exception.BotoServerError, err:
+      except boto.exception.BotoServerError as err:
         error_msg = boto_exception(err)
         if 'cannot be found.' in error_msg:
           changed = False
           module.exit_json(changed=changed,
                            msg="%s policy is already absent" % policy_name)
+        else:
+          module.fail_json(msg=err.message)
 
     updated_policies = [cp for cp in iam.list_role_policies(name).
                                         list_role_policies_result.
                                         policy_names]
-  except boto.exception.BotoServerError, err:
+  except boto.exception.BotoServerError as err:
     error_msg = boto_exception(err)
     module.fail_json(changed=changed, msg=error_msg)
 
@@ -234,25 +240,26 @@ def group_action(module, iam, name, policy_name, skip, pdoc, state):
     current_policies = [cp for cp in iam.get_all_group_policies(name).
                                         list_group_policies_result.
                                         policy_names]
+    matching_policies = []
     for pol in current_policies:
       if urllib.unquote(iam.get_group_policy(name, pol).
                         get_group_policy_result.policy_document) == pdoc:
         policy_match = True
-        if policy_match:
-          msg=("The policy document you specified already exists "
-               "under the name %s." % pol)
-    if state == 'present' and skip:
-      if policy_name not in current_policies and not policy_match:
-        changed = True
-        iam.put_group_policy(name, policy_name, pdoc)
-    elif state == 'present' and not skip:
+        matching_policies.append(pol)
+        msg=("The policy document you specified already exists "
+             "under the name %s." % pol)
+    if state == 'present':
+      # If policy document does not already exist (either it's changed
+      # or the policy is not present) or if we're not skipping dupes then
+      # make the put call.  Note that the put call does a create or update.
+      if not policy_match or (not skip and policy_name not in matching_policies):
         changed = True
         iam.put_group_policy(name, policy_name, pdoc)
     elif state == 'absent':
       try:
         iam.delete_group_policy(name, policy_name)
         changed = True
-      except boto.exception.BotoServerError, err:
+      except boto.exception.BotoServerError as err:
         error_msg = boto_exception(err)
         if 'cannot be found.' in error_msg:
           changed = False
@@ -262,7 +269,7 @@ def group_action(module, iam, name, policy_name, skip, pdoc, state):
     updated_policies = [cp for cp in iam.get_all_group_policies(name).
                                         list_group_policies_result.
                                         policy_names]
-  except boto.exception.BotoServerError, err:
+  except boto.exception.BotoServerError as err:
     error_msg = boto_exception(err)
     module.fail_json(changed=changed, msg=error_msg)
 
@@ -279,7 +286,7 @@ def main():
       iam_name=dict(default=None, required=False),
       policy_name=dict(default=None, required=True),
       policy_document=dict(default=None, required=False),
-      policy_json=dict(default=None, required=False),
+      policy_json=dict(type='json', default=None, required=False),
       skip_duplicates=dict(type='bool', default=True, required=False)
   ))
 
@@ -305,10 +312,13 @@ def main():
           pdoc = json.dumps(json.load(json_data))
           json_data.close()
   elif module.params.get('policy_json') != None:
-      try:
-        pdoc = json.dumps(module.params.get('policy_json'))
-      except Exception as e:
-        module.fail_json(msg=str(e) + '\n' + module.params.get('policy_json'))
+      pdoc = module.params.get('policy_json')
+      # if its a string, assume it is already JSON
+      if not isinstance(pdoc, basestring):
+        try:
+          pdoc = json.dumps(pdoc)
+        except Exception as e:
+          module.fail_json(msg='Failed to convert the policy into valid JSON: %s' % str(e))
   else:
     pdoc=None
 
@@ -316,10 +326,10 @@ def main():
 
   try:
     if region:
-        iam = boto.iam.connect_to_region(region, **aws_connect_kwargs)
+        iam = connect_to_aws(boto.iam, region, **aws_connect_kwargs)
     else:
         iam = boto.iam.connection.IAMConnection(**aws_connect_kwargs)
-  except boto.exception.NoAuthHandlerFound, e:
+  except boto.exception.NoAuthHandlerFound as e:
       module.fail_json(msg=str(e))
 
   changed = False
@@ -343,4 +353,5 @@ def main():
 from ansible.module_utils.basic import *
 from ansible.module_utils.ec2 import *
 
-main()
+if __name__ == '__main__':
+    main()

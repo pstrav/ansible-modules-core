@@ -16,13 +16,17 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'core',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: synchronize
 version_added: "1.4"
-short_description: Uses rsync to make synchronizing file paths in your playbooks quick and easy.
+short_description: A wrapper around rsync to make common tasks in your playbooks quick and easy.
 description:
-    - C(synchronize) is a wrapper around the rsync command, meant to make common tasks with rsync easier. It is run and originates on the local host where Ansible is being run. Of course, you could just use the command action to call rsync yourself, but you also have to add a fair number of boilerplate options and host facts. You `still` may need to call rsync directly via C(command) or C(shell) depending on your use case. C(synchronize) does not provide access to the full power of rsync, but does make most invocations easier to follow.
+    - C(synchronize) is a wrapper around rsync to make common tasks in your playbooks quick and easy. It is run and originates on the local host where Ansible is being run. Of course, you could just use the C(command) action to call rsync yourself, but you also have to add a fair number of boilerplate options and host facts. C(synchronize) is not intended to provide access to the full power of rsync, but does make the most common invocations easier to implement. You `still` may need to call rsync directly via C(command) or C(shell) depending on your use case.
 options:
   src:
     description:
@@ -35,7 +39,7 @@ options:
   dest_port:
     description:
       - Port number for ssh on the destination host. Prior to ansible 2.0, the ansible_ssh_port inventory var took precedence over this value.
-    default: Value of ansible_ssh_port for this host, remote_port config setting, or 22 if none of those are set
+    default: Value of ansible_ssh_port for this host, remote_port config setting, or the value from ssh client configuration if none of those are set
     version_added: "1.5"
   mode:
     description:
@@ -72,7 +76,7 @@ options:
     version_added: "1.5"
   delete:
     description:
-      - Delete files that don't exist (after transfer, not before) in the C(src) path. This option requires C(recursive=yes).
+      - Delete files in C(dest) that don't exist (after transfer, not before) in the C(src) path. This option requires C(recursive=yes).
     choices: [ 'yes', 'no' ]
     default: 'no'
     required: false
@@ -130,7 +134,7 @@ options:
     required: false
   rsync_timeout:
     description:
-      - Specify a --timeout for the rsync command in seconds. 
+      - Specify a --timeout for the rsync command in seconds.
     default: 0
     required: false
   set_remote_user:
@@ -141,7 +145,7 @@ options:
   use_ssh_args:
     description:
       - Use the ssh_args specified in ansible.cfg
-    default: "yes"
+    default: "no"
     choices:
       - "yes"
       - "no"
@@ -167,55 +171,115 @@ options:
 notes:
    - rsync must be installed on both the local and remote host.
    - For the C(synchronize) module, the "local host" is the host `the synchronize task originates on`, and the "destination host" is the host `synchronize is connecting to`.
-   - "The user and permissions for the synchronize `src` are those of the user running the Ansible task on the local host, or the `become_user` if `become: yes` is active. synchronize will attempt to escalate privileges to the become_user `on the local host`."
-   - The user and permissions for the synchronize `dest` are those of the `remote_user` on the destination host. If you require permissions `other` than those of the remote_user, you must specify this with a sudo command inside the C(rsync_path) option in the task; for example, `rsync_path="sudo rsync"`.
+   - The "local host" can be changed to a different host by using `delegate_to`.  This enables copying between two remote hosts or entirely on one remote machine.
+   - "The user and permissions for the synchronize `src` are those of the user running the Ansible task on the local host (or the remote_user for a delegate_to host when delegate_to is used)."
+   - The user and permissions for the synchronize `dest` are those of the `remote_user` on the destination host or the `become_user` if `become=yes` is active.
+   - In 2.0.0.0 a bug in the synchronize module made become occur on the "local host".  This was fixed in 2.0.1.
    - Expect that dest=~/x will be ~<remote_user>/x even if using sudo.
    - Inspect the verbose output to validate the destination user/host/path
      are what was expected.
-   - To exclude files and directories from being synchronized, you may add 
+   - To exclude files and directories from being synchronized, you may add
      C(.rsync-filter) files to the source directory.
-
+   - rsync daemon must be up and running with correct permission when using
+     rsync protocol in source or destination path.
+   - The C(synchronize) module forces `--delay-updates` to avoid leaving a destination in a broken in-between state if the underlying rsync process encounters an error. Those synchronizing large numbers of files that are willing to trade safety for performance should call rsync directly.
 
 author: "Timothy Appnel (@tima)"
 '''
 
 EXAMPLES = '''
 # Synchronization of src on the control machine to dest on the remote hosts
-synchronize: src=some/relative/path dest=/some/absolute/path
-
-# Synchronization without any --archive options enabled
-synchronize: src=some/relative/path dest=/some/absolute/path archive=no
-
-# Synchronization with --archive options enabled except for --recursive
-synchronize: src=some/relative/path dest=/some/absolute/path recursive=no
-
-# Synchronization with --archive options enabled except for --times, with --checksum option enabled
-synchronize: src=some/relative/path dest=/some/absolute/path checksum=yes times=no
-
-# Synchronization without --archive options enabled except use --links
-synchronize: src=some/relative/path dest=/some/absolute/path archive=no links=yes
-
-# Synchronization of two paths both on the control machine
-local_action: synchronize src=some/relative/path dest=/some/absolute/path
-
-# Synchronization of src on the inventory host to the dest on the localhost in
-pull mode
-synchronize: mode=pull src=some/relative/path dest=/some/absolute/path
-
-# Synchronization of src on delegate host to dest on the current inventory host.
-# If delegate_to is set to the current inventory host, this can be used to synchronize
-# two directories on that host.
-synchronize:
+- synchronize:
     src: some/relative/path
     dest: /some/absolute/path
-delegate_to: delegate.host
+
+# Synchronization using rsync protocol (push)
+- synchronize:
+    src: some/relative/path/
+    dest: rsync://somehost.com/path/
+
+# Synchronization using rsync protocol (pull)
+- synchronize:
+    mode: pull
+    src: rsync://somehost.com/path/
+    dest: /some/absolute/path/
+
+# Synchronization using rsync protocol on delegate host (push)
+- synchronize:
+    src: /some/absolute/path/
+    dest: rsync://somehost.com/path/
+  delegate_to: delegate.host
+
+# Synchronization using rsync protocol on delegate host (pull)
+- synchronize:
+    mode: pull
+    src: rsync://somehost.com/path/
+    dest: /some/absolute/path/
+  delegate_to: delegate.host
+
+# Synchronization without any --archive options enabled
+- synchronize:
+    src: some/relative/path
+    dest: /some/absolute/path
+    archive: no
+
+# Synchronization with --archive options enabled except for --recursive
+- synchronize:
+    src: some/relative/path
+    dest: /some/absolute/path
+    recursive: no
+
+# Synchronization with --archive options enabled except for --times, with --checksum option enabled
+- synchronize:
+    src: some/relative/path
+    dest: /some/absolute/path
+    checksum: yes
+    times: no
+
+# Synchronization without --archive options enabled except use --links
+- synchronize:
+    src: some/relative/path
+    dest: /some/absolute/path
+    archive: no
+    links: yes
+
+# Synchronization of two paths both on the control machine
+- synchronize
+    src: some/relative/path
+    dest: /some/absolute/path
+  delegate_to: localhost
+
+# Synchronization of src on the inventory host to the dest on the localhost in pull mode
+- synchronize:
+    mode: pull
+    src: some/relative/path
+    dest: /some/absolute/path
+
+# Synchronization of src on delegate host to dest on the current inventory host.
+- synchronize:
+    src: /first/absolute/path
+    dest: /second/absolute/path
+  delegate_to: delegate.host
+
+# Synchronize two directories on one remote host.
+- synchronize:
+    src: /first/absolute/path
+    dest: /second/absolute/path
+  delegate_to: "{{ inventory_hostname }}"
 
 # Synchronize and delete files in dest on the remote host that are not found in src of localhost.
-synchronize: src=some/relative/path dest=/some/absolute/path delete=yes
+- synchronize:
+    src: some/relative/path
+    dest: /some/absolute/path
+    delete: yes
+    recursive: yes
 
 # Synchronize using an alternate rsync command
-# This specific command is granted sudo privileges on the destination
-synchronize: src=some/relative/path dest=/some/absolute/path rsync_path="sudo rsync"
+# This specific command is granted su privileges on the destination
+- synchronize:
+    src: some/relative/path
+    dest: /some/absolute/path
+    rsync_path: "su -c rsync"
 
 # Example .rsync-filter file in the source directory
 - var       # exclude any path whose last part is 'var'
@@ -223,13 +287,34 @@ synchronize: src=some/relative/path dest=/some/absolute/path rsync_path="sudo rs
 + /var/conf # include /var/conf even though it was previously excluded
 
 # Synchronize passing in extra rsync options
-synchronize:
+- synchronize:
     src: /tmp/helloworld
-    dest: /var/www/helloword
+    dest: /var/www/helloworld
     rsync_opts:
       - "--no-motd"
       - "--exclude=.git"
 '''
+client_addr = None
+
+
+def substitute_controller(path):
+    global client_addr
+    if not client_addr:
+        ssh_env_string = os.environ.get('SSH_CLIENT', None)
+        try:
+            client_addr, _ = ssh_env_string.split(None, 1)
+        except AttributeError:
+            ssh_env_string = os.environ.get('SSH_CONNECTION', None)
+            try:
+                client_addr, _ = ssh_env_string.split(None, 1)
+            except AttributeError:
+                pass
+        if not client_addr:
+            raise ValueError
+
+    if path.startswith('localhost:'):
+        path = path.replace('localhost', client_addr, 1)
+    return path
 
 
 def main():
@@ -237,11 +322,12 @@ def main():
         argument_spec = dict(
             src = dict(required=True),
             dest = dict(required=True),
-            dest_port = dict(default=22),
+            dest_port = dict(default=None, type='int'),
             delete = dict(default='no', type='bool'),
             private_key = dict(default=None),
             rsync_path = dict(default=None),
             _local_rsync_path = dict(default='rsync', type='path'),
+            _substitute_controller = dict(default='no', type='bool'),
             archive = dict(default='yes', type='bool'),
             checksum = dict(default='no', type='bool'),
             compress = dict(default='yes', type='bool'),
@@ -265,8 +351,15 @@ def main():
         supports_check_mode = True
     )
 
-    source = '"' + module.params['src'] + '"'
-    dest = '"' + module.params['dest'] + '"'
+    if module.params['_substitute_controller']:
+        try:
+            source = '"' + substitute_controller(module.params['src']) + '"'
+            dest = '"' + substitute_controller(module.params['dest']) + '"'
+        except ValueError:
+            module.fail_json(msg='Could not determine controller hostname for rsync to send to')
+    else:
+        source = '"' + module.params['src'] + '"'
+        dest = '"' + module.params['dest'] + '"'
     dest_port = module.params['dest_port']
     delete = module.params['delete']
     private_key = module.params['private_key']
@@ -290,6 +383,11 @@ def main():
     rsync_opts = module.params['rsync_opts']
     ssh_args = module.params['ssh_args']
     verify_host = module.params['verify_host']
+
+    if '/' not in rsync:
+        rsync = module.get_bin_path(rsync, required=True)
+
+    ssh = module.get_bin_path('ssh', required=True)
 
     cmd = '%s --delay-updates -F' % rsync
     if compress:
@@ -340,7 +438,7 @@ def main():
     if private_key is None:
         private_key = ''
     else:
-        private_key = '-i '+ private_key 
+        private_key = '-i '+ private_key
 
     ssh_opts = '-S none'
 
@@ -350,10 +448,17 @@ def main():
     if ssh_args:
       ssh_opts = '%s %s' % (ssh_opts, ssh_args)
 
-    if dest_port != 22:
-        cmd += " --rsh 'ssh %s %s -o Port=%s'" % (private_key, ssh_opts, dest_port)
-    else:
-        cmd += " --rsh 'ssh %s %s'" % (private_key, ssh_opts)  # need ssh param
+    if source.startswith('"rsync://') and dest.startswith('"rsync://'):
+        module.fail_json(msg='either src or dest must be a localhost', rc=1)
+
+    if not source.startswith('"rsync://') and not dest.startswith('"rsync://'):
+        # If the user specified a port value
+        # Note:  The action plugin takes care of setting this to a port from
+        # inventory if the user didn't specify an explicit dest_port
+        if dest_port is not None:
+            cmd += " --rsh 'ssh %s %s -o Port=%s'" % (private_key, ssh_opts, dest_port)
+        else:
+            cmd += " --rsh 'ssh %s %s'" % (private_key, ssh_opts)
 
     if rsync_path:
         cmd = cmd + " --rsync-path=%s" % (rsync_path)
@@ -369,9 +474,9 @@ def main():
 
     # expand the paths
     if '@' not in source:
-        source = os.path.expanduser(source) 
+        source = os.path.expanduser(source)
     if '@' not in dest:
-        dest = os.path.expanduser(dest) 
+        dest = os.path.expanduser(dest)
 
     cmd = ' '.join([cmd, source, dest])
     cmdstr = cmd
@@ -382,13 +487,19 @@ def main():
         changed = changed_marker in out
         out_clean=out.replace(changed_marker,'')
         out_lines=out_clean.split('\n')
-        while '' in out_lines: 
+        while '' in out_lines:
             out_lines.remove('')
-        return module.exit_json(changed=changed, msg=out_clean,
-                                rc=rc, cmd=cmdstr, stdout_lines=out_lines)
+        if module._diff:
+            diff = {'prepared': out_clean}
+            return module.exit_json(changed=changed, msg=out_clean,
+                                    rc=rc, cmd=cmdstr, stdout_lines=out_lines,
+                                    diff=diff)
+        else:
+            return module.exit_json(changed=changed, msg=out_clean,
+                                    rc=rc, cmd=cmdstr, stdout_lines=out_lines)
 
 # import module snippets
 from ansible.module_utils.basic import *
 
-main()
-
+if __name__ == '__main__':
+    main()

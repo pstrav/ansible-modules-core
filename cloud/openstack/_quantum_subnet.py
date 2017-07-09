@@ -26,6 +26,10 @@ try:
 except ImportError:
     HAVE_DEPS = False
 
+ANSIBLE_METADATA = {'status': ['deprecated'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: quantum_subnet
@@ -54,7 +58,7 @@ options:
      description:
         - The keystone URL for authentication
      required: false
-     default: 'http://127.0.0.1:35357/v2.0/'
+     default: http://127.0.0.1:35357/v2.0/
    region_name:
      description:
         - Name of the region
@@ -123,10 +127,16 @@ requirements:
 '''
 
 EXAMPLES = '''
-# Create a subnet for a tenant with the specified subnet
-- quantum_subnet: state=present login_username=admin login_password=admin
-                  login_tenant_name=admin tenant_name=tenant1
-                  network_name=network1 name=net1subnet cidr=192.168.0.0/24"
+- name: Create a subnet for a tenant with the specified subnet
+  quantum_subnet:
+    state: present
+    login_username: admin
+    login_password: admin
+    login_tenant_name: admin
+    tenant_name: tenant1
+    network_name: network1
+    name: net1subnet
+    cidr: 192.168.0.0/24
 '''
 
 _os_keystone   = None
@@ -139,7 +149,7 @@ def _get_ksclient(module, kwargs):
                                  password=kwargs.get('login_password'),
                                  tenant_name=kwargs.get('login_tenant_name'),
                                  auth_url=kwargs.get('auth_url'))
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error authenticating to the keystone: %s" %e.message)
     global _os_keystone
     _os_keystone = kclient
@@ -149,7 +159,7 @@ def _get_ksclient(module, kwargs):
 def _get_endpoint(module, ksclient):
     try:
         endpoint = ksclient.service_catalog.url_for(service_type='network', endpoint_type='publicURL')
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error getting network endpoint: %s" % e.message)
     return endpoint
 
@@ -163,7 +173,7 @@ def _get_neutron_client(module, kwargs):
     }
     try:
         neutron = client.Client('2.0', **kwargs)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = " Error in connecting to neutron: %s" % e.message)
     return neutron
 
@@ -188,7 +198,7 @@ def _get_net_id(neutron, module):
     }
     try:
         networks = neutron.list_networks(**kwargs)
-    except Exception, e:
+    except Exception as e:
         module.fail_json("Error in listing neutron networks: %s" % e.message)
     if not networks['networks']:
             return None
@@ -208,7 +218,7 @@ def _get_subnet_id(module, neutron):
         }
         try:
             subnets = neutron.list_subnets(**kwargs)
-        except Exception, e:
+        except Exception as e:
             module.fail_json( msg = " Error in getting the subnet list:%s " % e.message)
         if not subnets['subnets']:
             return None
@@ -242,7 +252,7 @@ def _create_subnet(module, neutron):
         subnet.pop('dns_nameservers')
     try:
         new_subnet = neutron.create_subnet(dict(subnet=subnet))
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Failure in creating subnet: %s" % e.message)
     return new_subnet['subnet']['id']
 
@@ -250,7 +260,7 @@ def _create_subnet(module, neutron):
 def _delete_subnet(module, neutron, subnet_id):
     try:
         neutron.delete_subnet(subnet_id)
-    except Exception, e:
+    except Exception as e:
         module.fail_json( msg = "Error in deleting subnet: %s" % e.message)
     return True
 

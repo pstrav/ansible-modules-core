@@ -25,6 +25,10 @@ except ImportError:
     HAS_SHADE = False
 
 
+ANSIBLE_METADATA = {'status': ['preview'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: os_server_volume
@@ -146,7 +150,7 @@ def main():
             )
 
     except (shade.OpenStackCloudException, shade.OpenStackCloudTimeout) as e:
-        module.fail_json(msg=e.message)
+        module.fail_json(msg=str(e))
 
 # this is magic, see lib/ansible/module_utils/common.py
 from ansible.module_utils.basic import *

@@ -15,6 +15,10 @@
 # You should have received a copy of the GNU General Public License
 # along with Ansible.  If not, see <http://www.gnu.org/licenses/>.
 
+ANSIBLE_METADATA = {'status': ['stableinterface'],
+                    'supported_by': 'committer',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: ec2_key
@@ -149,7 +153,7 @@ def main():
                             time.sleep(1)
                         if not action_complete:
                             module.fail_json(msg="timed out while waiting for the key to be removed")
-                except Exception, e:
+                except Exception as e:
                     module.fail_json(msg="Unable to delete key pair '%s' - %s" % (key, e))
             key = None
             changed = True
@@ -241,4 +245,5 @@ def main():
 from ansible.module_utils.basic import *
 from ansible.module_utils.ec2 import *
 
-main()
+if __name__ == '__main__':
+    main()

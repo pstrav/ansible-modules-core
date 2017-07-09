@@ -26,6 +26,10 @@ try:
 except ImportError:
     HAVE_DEPS = False
 
+ANSIBLE_METADATA = {'status': ['deprecated'],
+                    'supported_by': 'community',
+                    'version': '1.0'}
+
 DOCUMENTATION = '''
 ---
 module: quantum_router
@@ -55,7 +59,7 @@ options:
      description:
         - The keystone url for authentication
      required: false
-     default: 'http://127.0.0.1:35357/v2.0/'
+     default: http://127.0.0.1:35357/v2.0/
    region_name:
      description:
         - Name of the region
@@ -88,12 +92,13 @@ requirements:
 '''
 
 EXAMPLES = '''
-# Creates a router for tenant admin
-- quantum_router: state=present
-                login_username=admin
-                login_password=admin
-                login_tenant_name=admin
-                name=router1"
+- name: Create a router for tenant admin
+  quantum_router:
+    state: present
+    login_username: admin
+    login_password: admin
+    login_tenant_name: admin
+    name: router1
 '''
 
 _os_keystone = None
@@ -105,7 +110,7 @@ def _get_ksclient(module, kwargs):
                                  password=kwargs.get('login_password'),
                                  tenant_name=kwargs.get('login_tenant_name'),
                                  auth_url=kwargs.get('auth_url'))
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error authenticating to the keystone: %s " % e.message)
     global _os_keystone
     _os_keystone = kclient
@@ -115,7 +120,7 @@ def _get_ksclient(module, kwargs):
 def _get_endpoint(module, ksclient):
     try:
         endpoint = ksclient.service_catalog.url_for(service_type='network', endpoint_type='publicURL')
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error getting network endpoint: %s" % e.message)
     return endpoint
 
@@ -129,7 +134,7 @@ def _get_neutron_client(module, kwargs):
     }
     try:
         neutron = client.Client('2.0', **kwargs)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error in connecting to neutron: %s " % e.message)
     return neutron
 
@@ -154,7 +159,7 @@ def _get_router_id(module, neutron):
     }
     try:
         routers = neutron.list_routers(**kwargs)
-    except Exception, e:
+    except Exception as e:
         module.fail_json(msg = "Error in getting the router list: %s " % e.message)
     if not routers['routers']:
         return None
@@ -168,7 +173,7 @@ def _create_router(module, neutron):
     }
     try:
         new_router = neutron.create_router(dict(router=router))
-    except Exception, e:
+    except Exception as e:
         module.fail_json( msg = "Error in creating router: %s" % e.message)
     return new_router['router']['id']
 
